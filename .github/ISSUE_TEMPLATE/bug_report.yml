@@ -1,0 +1,38 @@
+name: Bug report
+description: Report reproducible bridge behavior without including secrets
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include App Secrets, tokens, open IDs, private paths, logs with prompts, or SQLite files.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [macOS LaunchAgent, Linux systemd, Foreground]
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: Run feishu-codex-bridge support-bundle, inspect it locally, then include only the relevant redacted fields. Never upload SQLite or the managed env file.

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "sandbox": {
+    "maximum": "workspace-write"
+  },
+  "operations": {
+    "allow": ["commit", "push", "pull_request"],
+    "deny": ["deploy"],
+    "requireApproval": ["commit", "push", "pull_request"]
+  }
+}

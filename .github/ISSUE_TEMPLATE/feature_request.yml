@@ -1,0 +1,25 @@
+name: Feature request
+description: Propose a focused product or security improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What remote Codex workflow is currently difficult?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security and team impact
+      description: Describe identity, ownership, permissions, and external side effects.
+    validations:
+      required: true

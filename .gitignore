@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+var/*.json
+var/*.tmp
+var/*.sqlite*
+var/backups/
+var/diagnostics/
+lark-im-resources/
+docs/audits/
+*.log
+*.log.*
+.DS_Store
+*.tsbuildinfo

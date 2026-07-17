@@ -1,0 +1,76 @@
+{
+  "name": "feishu-codex-console",
+  "version": "1.0.0-beta.4",
+  "description": "A reliable Feishu control plane for local Codex projects, sessions, approvals, and live Card 2.0 tasks.",
+  "private": false,
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LeoChaseYoung/feishu-codex-console.git"
+  },
+  "keywords": [
+    "codex",
+    "feishu",
+    "lark",
+    "bot",
+    "remote-development",
+    "team"
+  ],
+  "homepage": "https://github.com/LeoChaseYoung/feishu-codex-console#readme",
+  "bugs": {
+    "url": "https://github.com/LeoChaseYoung/feishu-codex-console/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "feishu-codex-console": "scripts/cli.mjs",
+    "feishu-codex-bridge": "scripts/cli.mjs"
+  },
+  "files": [
+    "dist/",
+    "scripts/",
+    "docs/*.md",
+    "docs/requirements/*.md",
+    ".env.example",
+    ".feishu-codex-policy.example.json",
+    ".feishu-codex-runbooks.example.json",
+    "README.md",
+    "README.en.md",
+    "ROADMAP.md",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsx src/index.ts",
+    "doctor": "tsx src/doctor.ts",
+    "start": "node --disable-warning=ExperimentalWarning dist/index.js",
+    "service:install": "npm run build && node scripts/service.mjs install",
+    "service:status": "node scripts/service.mjs status",
+    "service:stop": "node scripts/service.mjs stop",
+    "service:restart": "node scripts/service.mjs restart",
+    "service:uninstall": "node scripts/service.mjs uninstall",
+    "smoke:codex": "tsx src/smoke.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:package": "node scripts/package-smoke.mjs",
+    "release:check": "node scripts/verify-release.mjs",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@larksuite/cli": "1.0.70",
+    "@openai/codex": "0.144.4",
+    "dotenv": "17.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1",
+    "tsx": "4.23.1",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}

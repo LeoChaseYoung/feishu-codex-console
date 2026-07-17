@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "runbooks": [
+    {
+      "id": "verify",
+      "name": "测试并修复",
+      "description": "运行项目已有测试，定位失败原因并完成必要修复",
+      "prompt": "运行当前项目已有的测试与静态检查，修复发现的问题，并总结修改内容与验证结果。",
+      "sandboxMode": "workspace-write",
+      "reasoningEffort": "high"
+    },
+    {
+      "id": "inspect-module",
+      "name": "检查指定模块",
+      "description": "对指定模块做只读结构、风险和测试覆盖检查",
+      "prompt": "只读检查 {{module}} 模块，说明它的职责、主要依赖、潜在风险和测试覆盖缺口，不修改文件。",
+      "sandboxMode": "read-only",
+      "parameters": [
+        {
+          "name": "module",
+          "label": "模块",
+          "description": "仓库内的目录或模块名",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "refresh-docs",
+      "name": "刷新项目文档",
+      "description": "根据当前代码更新项目内已有文档并检查链接",
+      "prompt": "检查当前实现与项目文档的一致性，更新过期说明并验证文档内的本地链接。完成后只汇报变更与验证结果。",
+      "sandboxMode": "workspace-write",
+      "reasoningEffort": "medium"
+    }
+  ]
+}

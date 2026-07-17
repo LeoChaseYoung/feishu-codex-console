@@ -1,0 +1,41 @@
+name: Good first issue proposal
+description: Propose a small, testable starter contribution
+title: "[Good first issue]: "
+labels: ["good first issue", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: Keep starter work narrow, locally testable, and free of real Feishu identities or credentials.
+  - type: textarea
+    id: problem
+    attributes:
+      label: User-visible problem
+      description: What small installation, card, documentation, or diagnostic problem should improve?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Suggested scope
+      description: Name the likely files and explicitly list what is out of scope.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance checks
+      description: List the observable behavior and automated tests that should pass.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Documentation
+        - Installation and diagnostics
+        - Feishu Card 2.0 presentation
+        - Pure policy or parser test
+        - Cross-platform service tooling
+    validations:
+      required: true
