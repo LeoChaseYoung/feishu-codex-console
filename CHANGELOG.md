@@ -2,6 +2,12 @@
 
 All notable changes are recorded here. Versions follow Semantic Versioning while the public API stabilizes.
 
+## 1.0.0-beta.7 - 2026-07-17
+
+### Changed
+
+- npm releases now use GitHub OIDC trusted publishing with job-scoped permissions and no long-lived repository token; prerelease tags create correctly marked GitHub prereleases.
+
 ## 1.0.0-beta.6 - 2026-07-17
 
 ### Fixed
