@@ -1,6 +1,6 @@
 {
   "name": "feishu-codex-console",
-  "version": "1.0.0-beta.5",
+  "version": "1.0.0-beta.6",
   "description": "A reliable Feishu control plane for local Codex projects, sessions, approvals, and live Card 2.0 tasks.",
   "private": false,
   "license": "MIT",

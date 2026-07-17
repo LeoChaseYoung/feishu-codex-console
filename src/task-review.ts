@@ -339,30 +339,40 @@ async function readGitWorkspaceState(
   projectPath: string,
   baseRef: string,
 ): Promise<Map<string, GitFileState>> {
-  const [namesOutput, numstatOutput, untrackedOutput] = await Promise.all([
-    runGit(projectPath, [
-      "diff",
-      "--relative",
-      "--no-ext-diff",
-      "--no-renames",
-      "--name-status",
-      "-z",
-      baseRef,
-      "--",
-      ".",
-    ]),
-    runGit(projectPath, [
-      "diff",
-      "--relative",
-      "--no-ext-diff",
-      "--no-renames",
-      "--numstat",
-      "-z",
-      baseRef,
-      "--",
-      ".",
-    ]),
-    runGit(projectPath, ["ls-files", "--others", "--exclude-standard", "-z", "--", "."]),
+  // Keep index-backed reads ordered. Concurrent Git processes can race while
+  // refreshing the index/untracked cache and intermittently omit a freshly
+  // created untracked file from the task baseline on Linux.
+  const namesOutput = await runGit(projectPath, [
+    "diff",
+    "--relative",
+    "--no-ext-diff",
+    "--no-renames",
+    "--name-status",
+    "-z",
+    baseRef,
+    "--",
+    ".",
+  ]);
+  const numstatOutput = await runGit(projectPath, [
+    "diff",
+    "--relative",
+    "--no-ext-diff",
+    "--no-renames",
+    "--numstat",
+    "-z",
+    baseRef,
+    "--",
+    ".",
+  ]);
+  const untrackedOutput = await runGit(projectPath, [
+    "-c",
+    "core.untrackedCache=false",
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "-z",
+    "--",
+    ".",
   ]);
 
   const stats = parseNumstat(numstatOutput);
@@ -547,6 +557,11 @@ function runGit(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolvePromise, reject) => {
     const child = spawn("git", args, {
       cwd,
+      env: {
+        ...process.env,
+        GIT_OPTIONAL_LOCKS: "0",
+        GIT_TERMINAL_PROMPT: "0",
+      },
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
     });

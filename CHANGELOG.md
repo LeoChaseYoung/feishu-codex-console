@@ -2,6 +2,12 @@
 
 All notable changes are recorded here. Versions follow Semantic Versioning while the public API stabilizes.
 
+## 1.0.0-beta.6 - 2026-07-17
+
+### Fixed
+
+- Task-review baselines now serialize index-backed Git reads, disable optional index locks, and bypass the untracked cache so freshly created pre-existing files are captured consistently on Linux.
+
 ## 1.0.0-beta.5 - 2026-07-17
 
 ### Fixed
