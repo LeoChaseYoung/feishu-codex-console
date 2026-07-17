@@ -194,13 +194,13 @@ npx feishu-codex-console migrate --from /absolute/path/to/old/feishu-codex-bridg
 
 ## 维护者发布
 
-每次推送 `v<package version>` 标签时，Release workflow 会重新运行类型检查、测试、生产构建和 tarball 干净安装测试，然后使用 npm provenance 发布并创建 GitHub Release。
+每次推送 `v<package version>` 标签时，Release workflow 会重新运行类型检查、测试、生产构建和 tarball 干净安装测试，然后通过 GitHub OIDC 可信发布生成 npm provenance，并创建 GitHub Release。
 
 仓库需要配置：
 
 - GitHub Environment：`npm`，建议要求维护者审批。
-- Environment secret：`NPM_TOKEN`。
-- npm 账号开启双因素认证，并使用适合 CI 的 granular access token。
+- npm 包的 Trusted Publisher：GitHub Actions、仓库 `LeoChaseYoung/feishu-codex-console`、工作流 `release.yml`、Environment `npm`，仅允许 `npm publish`。
+- npm 账号开启双因素认证；仓库和 Environment 不保存长期 `NPM_TOKEN`。
 
 标签必须与 `package.json` 完全一致，例如 `1.0.0-beta.4` 对应 `v1.0.0-beta.4`。
 

@@ -6,8 +6,7 @@ on:
       - "v*"
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 jobs:
   preflight:
@@ -22,8 +21,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -39,20 +38,27 @@ jobs:
     needs: preflight
     runs-on: ubuntu-latest
     environment: npm
+    permissions:
+      contents: write
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
-          cache: npm
-          registry-url: https://registry.npmjs.org
+          node-version: 24
+          package-manager-cache: false
+      - name: Install trusted-publishing npm client
+        run: npm install --global npm@12.0.1
       - run: npm ci
       - run: npm run release:check
-      - name: Publish npm package with provenance
-        run: npm publish --access public --provenance --tag "$(node scripts/release-dist-tag.mjs)"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish npm package through GitHub OIDC
+        run: npm publish --access public --tag "$(node scripts/release-dist-tag.mjs)"
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" --verify-tag --generate-notes
+        run: |
+          release_args=(--verify-tag --generate-notes)
+          if [[ "$(node scripts/release-dist-tag.mjs)" == "next" ]]; then
+            release_args+=(--prerelease)
+          fi
+          gh release create "${GITHUB_REF_NAME}" "${release_args[@]}"

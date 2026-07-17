@@ -12,7 +12,7 @@
 - [ ] tarball 能初始化运行手册且绝不覆盖已有目录，并完成一次不带 `--yes` 的只读升级预览。
 - [ ] `version --json` 与兼容矩阵中的 Codex、lark-cli、配置、状态和 SQLite 版本一致。
 - [ ] `npm run release:check -- v<version>` 通过。
-- [ ] npm 发布使用 provenance，预发布版本进入 `next` dist-tag。
+- [ ] npm 发布通过 GitHub OIDC Trusted Publisher 生成 provenance，仓库和 Environment 中不存在长期 `NPM_TOKEN`，预发布版本进入 `next` dist-tag。
 
 这些门禁由 CI 和 Release workflow 执行；任一平台失败都不会进入 npm publish。
 
