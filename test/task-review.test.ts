@@ -70,6 +70,14 @@ describe("task review", () => {
     const review = await captureTaskReview(directory, baseline, [
       { path: "src/index.ts", kind: "update" },
     ]);
+    const includedPreexisting = review.files.find((file) => file.path === "preexisting.txt");
+    if (includedPreexisting) {
+      console.log("task-review attribution diagnostics", {
+        baselineFile: baseline.files.find((file) => file.path === "preexisting.txt"),
+        currentFile: includedPreexisting,
+        baselineFiles: baseline.files.map((file) => file.path),
+      });
+    }
     expect(review.attribution).toBe("mixed");
     expect(review.files.map((file) => file.path)).toEqual(["src/index.ts"]);
     expect(review.preexistingFilesExcluded).toBe(1);
