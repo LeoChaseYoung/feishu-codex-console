@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { lstat, readFile, readlink } from "node:fs/promises";
 import { basename, relative, resolve, sep } from "node:path";
 
@@ -494,11 +496,25 @@ async function fileFingerprint(projectPath: string, path: string): Promise<strin
     if (details.isSymbolicLink()) {
       return `link:${await readlink(localPath)}`;
     }
-    return `${details.isFile() ? "file" : "other"}:${details.size}:${Math.trunc(details.mtimeMs)}`;
+    if (details.isFile()) {
+      const digest = await hashFile(localPath);
+      return `file:${details.size}:${details.mode & 0o777}:${digest}`;
+    }
+    return `other:${details.mode}:${details.size}`;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return "deleted";
     return null;
   }
+}
+
+function hashFile(path: string): Promise<string> {
+  return new Promise((resolvePromise, reject) => {
+    const hash = createHash("sha256");
+    const stream = createReadStream(path);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.once("error", reject);
+    stream.once("end", () => resolvePromise(`sha256:${hash.digest("hex")}`));
+  });
 }
 
 function normalizeObservedPath(projectPath: string, path: string): string {

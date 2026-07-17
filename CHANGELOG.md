@@ -2,6 +2,13 @@
 
 All notable changes are recorded here. Versions follow Semantic Versioning while the public API stabilizes.
 
+## 1.0.0-beta.5 - 2026-07-17
+
+### Fixed
+
+- Task-review baselines now use streamed SHA-256 content fingerprints instead of filesystem timestamps, preventing unchanged pre-existing files from being attributed to a Codex task on Linux or after metadata-only timestamp changes.
+- Added cross-platform regression coverage for dirty-worktree attribution before publishing.
+
 ## 1.0.0-beta.4 - 2026-07-17
 
 ### Added

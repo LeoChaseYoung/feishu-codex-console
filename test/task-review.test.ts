@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -64,6 +64,8 @@ describe("task review", () => {
     await writeFile(path.join(directory, "preexisting.txt"), "before\n");
     const baseline = await captureTaskReviewBaseline(directory, true);
 
+    const touchedAt = new Date(Date.now() + 60_000);
+    await utimes(path.join(directory, "preexisting.txt"), touchedAt, touchedAt);
     await writeFile(path.join(directory, "src", "index.ts"), "export const value = 3;\n");
     const review = await captureTaskReview(directory, baseline, [
       { path: "src/index.ts", kind: "update" },
