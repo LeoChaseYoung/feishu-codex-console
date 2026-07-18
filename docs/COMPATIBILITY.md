@@ -30,13 +30,13 @@ The stable `1.x` promise covers documented CLI commands, configuration keys, run
 Preview an upgrade first:
 
 ```bash
-npx feishu-codex-console@latest upgrade --config /absolute/path/default.env
+npx feishu-codex-console@next upgrade --config /absolute/path/default.env
 ```
 
 The preview is read-only. When no task is actively running, repeat with `--yes`. The command creates a verified SQLite backup, runs the new package’s doctor, stops the old service, installs the new service, and waits for both Feishu consumers to become healthy. Failure triggers a data rollback and, when the previous package location is still available, reinstalls and verifies the previous service.
 
 ```bash
-npx feishu-codex-console@latest upgrade \
+npx feishu-codex-console@next upgrade \
   --config /absolute/path/default.env \
   --yes
 ```

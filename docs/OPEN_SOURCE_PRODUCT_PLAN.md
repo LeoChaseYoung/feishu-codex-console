@@ -25,7 +25,7 @@
 
 ### v0.1：别人能装上
 
-- `npx feishu-codex-console init` 交互式初始化。
+- `npx feishu-codex-console@next init` 交互式初始化。
 - 个人安全、团队安全、高级模式三档权限预设。
 - Node、Codex 登录、飞书 Bot 身份、项目目录和服务状态检查。
 - 配置写入用户配置目录，不把凭证或成员标识写进 Git 仓库。

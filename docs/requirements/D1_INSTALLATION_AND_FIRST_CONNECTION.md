@@ -86,7 +86,7 @@ MVP 绑定用户已有的飞书自建应用，不替用户自动创建飞书应�
 ## 6. 端到端安装流程
 
 ```text
-运行 npx feishu-codex-console init
+运行 npx feishu-codex-console@next init
   ↓
 欢迎页与已有安装检测
   ↓
