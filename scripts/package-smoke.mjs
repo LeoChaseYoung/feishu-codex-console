@@ -31,10 +31,20 @@ try {
   await access(compatibilityCli);
   run(cli, ["help"], installDir);
   run(compatibilityCli, ["help"], installDir);
+  const helpAlias = run(cli, ["--help"], installDir);
+  if (!helpAlias.includes("用法：")) {
+    throw new Error("Installed CLI did not expose help through --help.");
+  }
+  run(compatibilityCli, ["-h"], installDir);
   const versionInfo = JSON.parse(run(cli, ["version", "--json"], installDir));
   if (versionInfo.product !== "feishu-codex-console" || !versionInfo.version) {
     throw new Error("Installed CLI did not expose version and compatibility metadata.");
   }
+  const versionAlias = run(cli, ["--version"], installDir);
+  if (!versionAlias.includes(`feishu-codex-console ${versionInfo.version}`)) {
+    throw new Error("Installed CLI did not expose its version through --version.");
+  }
+  run(compatibilityCli, ["-v"], installDir);
   runExpectFailure(
     cli,
     [
@@ -116,7 +126,7 @@ try {
     if (configMode !== 0o600) throw new Error(`Config mode is ${configMode.toString(8)}, expected 600.`);
     if (dataMode !== 0o700) throw new Error(`Data mode is ${dataMode.toString(8)}, expected 700.`);
   }
-  console.log("Package smoke test passed: packed, installed, resumed, initialized runbooks, and previewed a safe upgrade.");
+  console.log("Package smoke test passed: packed, installed, verified CLI aliases, resumed, initialized runbooks, and previewed a safe upgrade.");
 } finally {
   await rm(sandbox, { recursive: true, force: true });
   if (archive) await rm(path.join(packageRoot, archive), { force: true });

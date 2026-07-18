@@ -33,7 +33,15 @@ import { initializeRunbookTemplate } from "./runbook-template.mjs";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
-const command = args[0] && !args[0].startsWith("-") ? args.shift() : "help";
+const commandToken = args[0];
+const shorthandCommand =
+  commandToken === "--help" || commandToken === "-h"
+    ? "help"
+    : commandToken === "--version" || commandToken === "-v"
+      ? "version"
+      : undefined;
+if (shorthandCommand) args.shift();
+const command = shorthandCommand ?? (args[0] && !args[0].startsWith("-") ? args.shift() : "help");
 const flags = parseFlags(args);
 
 try {

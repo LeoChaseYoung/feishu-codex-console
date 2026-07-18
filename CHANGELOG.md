@@ -2,6 +2,12 @@
 
 All notable changes are recorded here. Versions follow Semantic Versioning while the public API stabilizes.
 
+## 1.0.0-beta.8 - 2026-07-18
+
+### Fixed
+
+- The installed CLI now supports the standard `--help`/`-h` and `--version`/`-v` aliases instead of treating them as options with missing values.
+
 ## 1.0.0-beta.7 - 2026-07-17
 
 ### Changed
