@@ -48,7 +48,7 @@ jobs:
           node-version: 24
           package-manager-cache: false
       - name: Install trusted-publishing npm client
-        run: npm install --global npm@12.0.1
+        run: npm install --global npm@11.18.0
       - run: npm ci
       - run: npm run release:check
       - name: Publish npm package through GitHub OIDC
