@@ -83,7 +83,7 @@ Feishu Codex Console 是一个开源、本地优先的 Codex 远程工作会话�
 
 ### 当前已有
 
-- `npx feishu-codex-console init` 初始化向导。
+- `npx feishu-codex-console@next init` 初始化向导。
 - 个人安全、团队安全和高级模式预设。
 - 自动识别 `open_id`、`chat_id` 和会话类型。
 - 私有配置和数据目录。

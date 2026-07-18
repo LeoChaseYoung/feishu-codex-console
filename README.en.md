@@ -9,7 +9,7 @@ The bridge is local-first and outbound-only. It maps a local Codex thread to a d
 Requirements: macOS or Linux, Node.js 22+, a local `codex login`, and a Feishu custom app with Bot, long-connection message events, and CardKit enabled.
 
 ```bash
-npx feishu-codex-console init
+npx feishu-codex-console@next init
 ```
 
 The guided installer validates the environment and Feishu capabilities, discovers your member/chat identity from one test message, writes a private configuration, installs a LaunchAgent or systemd user service, waits for both event consumers, and sends the first product card.
@@ -59,7 +59,7 @@ feishu-codex-bridge doctor --fix
 feishu-codex-bridge support-bundle
 feishu-codex-bridge backup
 feishu-codex-bridge version
-npx feishu-codex-console@latest upgrade --config /absolute/path/default.env
+npx feishu-codex-console@next upgrade --config /absolute/path/default.env
 ```
 
 An upgrade is a read-only preview until `--yes` is added. It blocks live-task replacement, creates a verified database backup, checks the new package, validates service health, and attempts automatic data/service rollback on failure.

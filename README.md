@@ -1,6 +1,6 @@
 # Feishu Codex Console
 
-[English](README.en.md) · [安装](docs/INSTALLATION.md) · [配置](docs/CONFIGURATION.md) · [兼容与升级](docs/COMPATIBILITY.md) · [Roadmap](ROADMAP.md)
+[10 分钟快速上手](docs/QUICKSTART.md) · [English](README.en.md) · [安装](docs/INSTALLATION.md) · [配置](docs/CONFIGURATION.md) · [兼容与升级](docs/COMPATIBILITY.md) · [Roadmap](ROADMAP.md)
 
 把本地 Codex thread 映射成一个可持续交流、可以协作和接管的飞书工作会话。人在外面时，可以在飞书里继续提问、分析、写文件、修改代码、回答 Codex 追问并处理权限确认；本机不需要开放公网端口。
 
@@ -55,21 +55,21 @@ flowchart LR
 
 要求：macOS 或 Linux、Node.js 22 或更高版本、本机已完成 `codex login`，并已配置可接收消息事件的飞书自建应用。项目会安装并优先使用固定版本的 `lark-cli`。
 
-推荐使用交互式向导：
+当前仍是公开测试版，推荐通过 `next` 通道使用交互式向导：
 
 ```bash
-npx feishu-codex-console init
+npx feishu-codex-console@next init
 ```
 
 向导会检查 Node、Codex 登录和飞书 Bot 身份，等待一条测试消息自动识别 `open_id`/`chat_id`，提供个人安全、团队安全和高级模式三档权限预设，并把配置以 `0600` 权限写入用户配置目录。自检通过后，它会安装 macOS LaunchAgent 或 Linux systemd user service。
 
-完整步骤见 [安装指南](docs/INSTALLATION.md)，全部配置见 [配置参考](docs/CONFIGURATION.md)，常见问题见 [故障排查](docs/TROUBLESHOOTING.md)，五分钟完整闭环见 [产品演示](docs/DEMO.md)。产品方向和逐项需求见 [产品需求地图](docs/PRODUCT_REQUIREMENTS_MAP.md)，公开路线见 [Roadmap](ROADMAP.md)，版本与依赖承诺见 [兼容矩阵](docs/COMPATIBILITY.md)。
+第一次部署直接看 [10 分钟快速上手](docs/QUICKSTART.md)。完整步骤见 [安装指南](docs/INSTALLATION.md)，全部配置见 [配置参考](docs/CONFIGURATION.md)，常见问题见 [故障排查](docs/TROUBLESHOOTING.md)，五分钟完整闭环见 [产品演示](docs/DEMO.md)。产品方向和逐项需求见 [产品需求地图](docs/PRODUCT_REQUIREMENTS_MAP.md)，公开路线见 [Roadmap](ROADMAP.md)，版本与依赖承诺见 [兼容矩阵](docs/COMPATIBILITY.md)。
 
 从源码安装：
 
 ```bash
 git clone https://github.com/LeoChaseYoung/feishu-codex-console.git
-cd feishu-codex-bridge
+cd feishu-codex-console
 npm install
 npx lark-cli config init --new
 npx lark-cli whoami --as bot
@@ -320,8 +320,8 @@ feishu-codex-bridge backups --config /absolute/path/to/default.env
 从新 npm 包升级时，先运行不带 `--yes` 的只读预览。执行模式会拒绝替换仍有活动任务的服务，依次完成校验备份、新包自检、服务安装和双消费者健康验证；失败时尝试恢复数据与仍可用的旧服务包。
 
 ```bash
-npx feishu-codex-console@latest upgrade --config /absolute/path/to/default.env
-npx feishu-codex-console@latest upgrade --config /absolute/path/to/default.env --yes
+npx feishu-codex-console@next upgrade --config /absolute/path/to/default.env
+npx feishu-codex-console@next upgrade --config /absolute/path/to/default.env --yes
 ```
 
 回滚会替换当前 SQLite，必须先停止服务；命令会先保存回滚前状态，并校验清单、SHA-256 和数据库完整性：

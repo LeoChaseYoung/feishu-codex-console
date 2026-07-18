@@ -2,6 +2,16 @@
 
 All notable changes are recorded here. Versions follow Semantic Versioning while the public API stabilizes.
 
+## 1.0.0-beta.9 - 2026-07-18
+
+### Added
+
+- A task-oriented Chinese quickstart covering Feishu app setup, first installation, first messages, multi-project group conventions, remote-readiness checks, upgrades, and common recovery paths.
+
+### Changed
+
+- Prerelease installation and upgrade examples now use the npm `next` channel explicitly, and the source-install directory name matches the public repository.
+
 ## 1.0.0-beta.8 - 2026-07-18
 
 ### Fixed

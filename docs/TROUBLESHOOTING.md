@@ -114,7 +114,7 @@ feishu-codex-bridge install --config /absolute/path/to/default.env
 旧源码安装使用：
 
 ```bash
-npx feishu-codex-console migrate --from /absolute/path/to/old/source
+npx feishu-codex-console@next migrate --from /absolute/path/to/old/source
 ```
 
 迁移不会删除旧 `.env` 或数据。新服务通过验证后再手工归档旧目录。

@@ -19,7 +19,7 @@
 ## 推荐安装
 
 ```bash
-npx feishu-codex-console init
+npx feishu-codex-console@next init
 ```
 
 向导会依次检查运行环境、选择权限预设、选择项目、自动识别飞书成员和会话、写入私有配置并安装后台服务。服务管理器返回后，向导还会等待消息与卡片事件连接同时就绪，并核对后台进程实际读取的配置文件；任一项不一致都不会显示安装完成。
@@ -89,7 +89,7 @@ feishu-codex-bridge discover
 ## 非交互式安装
 
 ```bash
-npx feishu-codex-console init \
+npx feishu-codex-console@next init \
   --yes \
   --preset personal \
   --open-id ou_replace_me \
@@ -99,7 +99,7 @@ npx feishu-codex-console init \
 团队示例：
 
 ```bash
-npx feishu-codex-console init \
+npx feishu-codex-console@next init \
   --yes \
   --preset team \
   --open-id ou_operator \
@@ -150,8 +150,8 @@ feishu-codex-bridge backups --config /absolute/path/team.env
 更新 npm 包时先预览；没有 `--yes` 不会修改服务或数据：
 
 ```bash
-npx feishu-codex-console@latest upgrade --config /absolute/path/default.env
-npx feishu-codex-console@latest upgrade --config /absolute/path/default.env --yes
+npx feishu-codex-console@next upgrade --config /absolute/path/default.env
+npx feishu-codex-console@next upgrade --config /absolute/path/default.env --yes
 ```
 
 升级会拒绝活动任务，创建一致性备份，用目标包自检，替换服务并验证产品版本、PID、配置路径、心跳和两个事件消费者。失败时会尝试恢复数据，并在旧包位置仍存在时恢复和验证旧服务。完整承诺见 [兼容与版本策略](COMPATIBILITY.md)。
@@ -177,7 +177,7 @@ feishu-codex-bridge status --config /absolute/path/team.env
 如果以前通过克隆仓库、编辑仓库根目录 `.env` 并安装 LaunchAgent 的方式运行，可以迁移到用户级配置：
 
 ```bash
-npx feishu-codex-console migrate --from /absolute/path/to/old/feishu-codex-bridge
+npx feishu-codex-console@next migrate --from /absolute/path/to/old/feishu-codex-bridge
 ```
 
 迁移器会复制并规范化旧配置，把相对路径转换为以旧源码目录为基准的绝对路径，继续使用原来的 SQLite/JSON 数据，然后运行 doctor。确认切换后，新服务必须通过健康和配置一致性检查才算迁移完成；旧 `.env` 和数据不会自动删除。非交互迁移使用 `--yes`，目标配置已存在时需显式添加 `--force`，迁移器会先备份再合并。
