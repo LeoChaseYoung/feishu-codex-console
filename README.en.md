@@ -34,13 +34,15 @@ The onboarding card starts one real, forced-read-only project overview. It compl
 | `项目` / `/projects` | Search, select, favorite, and inspect authorized projects |
 | `读取项目` / `/overview` | Build a local Git/package/file snapshot without starting Codex or spending AI tokens |
 | `设置` / `/settings` | Model, reasoning effort, sandbox, and temporary full-access leases |
-| `会话` / `/sessions` | Resume, compact, or start a native Codex thread |
+| `会话` / `/sessions` | Resume or explicitly bind a project thread, show its latest source, compact it, or open that exact thread in Codex desktop |
 | `任务` / `/tasks` | Active, queued, interrupted, and recent tasks |
 | `团队` / `/team` | Privacy-preserving team workload and outcomes |
 | `运行手册` / `/runbooks` | Reviewed repository task templates |
 | `追加 <request>` | Steer the current Codex turn |
 | `排队 <task>` | Create a separate queued task |
 | `停止` | Stop current work without pretending written files were reverted |
+
+The session center uses the native Codex thread as the single source of conversational context. On macOS, **Open in Codex desktop** navigates to that exact thread; unsupported or failed desktop launches show a truthful `codex resume <thread-id>` fallback. Binding and desktop handoff are blocked while work is active or queued. Feishu cards, controls, queue metadata, audit records, and ordinary group chat are never copied into Codex history, and opening a different desktop thread never silently changes the Feishu binding.
 
 Questions and read-only analysis use one editable Feishu Markdown reply that evolves from a compact working state into the final answer. Cards are reserved for controls, approvals, questions, long-running file/code work, and failures; reliable text remains the final delivery fallback.
 

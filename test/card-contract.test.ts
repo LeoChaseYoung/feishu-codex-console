@@ -260,6 +260,8 @@ function cardFixtures(): Array<[string, FeishuCard]> {
             createdAt: 1_000,
             updatedAt: 2_000,
             status: "idle",
+            activitySource: "feishu",
+            activityAt: 2_000_000,
           },
         ],
       }),

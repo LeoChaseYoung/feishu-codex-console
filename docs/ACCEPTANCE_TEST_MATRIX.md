@@ -12,7 +12,7 @@
 | P02～P03 / N30～N34 | 服务健康、PID/配置一致性、双消费者状态 | `test/service-health.test.mjs`、`test/health-file.test.ts`、`test/device-health.test.ts`、`test/device-recovery.test.ts` |
 | P03 / N55～N61 | 自适应首页、控制台、首次成功和远程就绪 | `test/home-card.test.ts`、`test/device-card.test.ts`、`test/onboarding-card.test.ts`、`test/remote-ready.test.ts` |
 | P04 / N35～N40 | 项目发现、排名、收藏、ACL、Git 状态和本地快照 | `test/project-registry.test.ts`、`test/project-card.test.ts`、`test/project-policy.test.ts`、`test/project-status.test.ts`、`test/project-overview.test.ts` |
-| P05 / N22、N41～N46 | 工作话题、thread 恢复、命名和成员/会话隔离 | `test/workspace-session.test.ts`、`test/conversation-turn-session.test.ts`、`test/session-naming.test.ts` |
+| P05 / N22、N41～N46 | 工作话题、thread 恢复、桌面接力、本地绑定、来源和成员/会话隔离 | `test/workspace-session.test.ts`、`test/conversation-turn-session.test.ts`、`test/session-naming.test.ts`、`test/desktop-handoff.test.ts`、`test/session-handoff.test.ts`、`test/session-card.test.ts` |
 | P06 / N22～N25 | 问答、分析、内容、代码、短回复继承和否定写入 | `test/task-intent.test.ts`、`test/product-response-routing.test.mjs`、`test/codex-runner.test.ts` |
 | P07 / N24～N29、N41～N46 | 队列、串行锁、追加、停止、失败和重启对账 | `test/task-queue.test.ts`、`test/task-center-card.test.ts`、`test/task-failure.test.ts`、`test/task-reconciliation.test.ts`、`test/progress.test.ts` |
 | P08 / N47～N54 | 模型能力、推理回退、临时权限、仓库策略和额度 | `test/model-capabilities.test.ts`、`test/control-card.test.ts`、`test/permission-lease.test.ts`、`test/project-policy.test.ts`、`test/account-quota.test.ts`、`test/quota-card.test.ts` |
@@ -36,7 +36,7 @@
 | E2E-P02 | P02 | 运行新手引导和第一次只读项目任务 | 引导只在真实成功后完成 | 零文件变化、零写权限租约消费 |
 | E2E-P03 | P03 | 打开首页、控制台，断开再恢复事件连接 | 状态和采样时间真实，恢复通知去重 | 健康快照与 UI 一致 |
 | E2E-P04 | P04 | 搜索两个同名项目、收藏、切换并读取项目 | 路径可辨识，影响确认正确 | `读取项目` 零模型调用、零文件变化 |
-| E2E-P05 | P05 | 新建、继续、压缩和恢复一个 native thread | 回复串继续同一会话，新会话隔离 | thread ID、项目和成员作用域正确 |
+| E2E-P05 | P05 | 新建、继续、压缩和恢复一个 native thread；从飞书在本机打开；本机新增一轮后回飞书继续；显式绑定同项目本地 thread | 两端继续同一会话，来源/时间更新，新会话隔离，控件不进入 Codex 历史 | 打开、继续和绑定前后 thread ID 一致；项目、成员和队列作用域正确 |
 | E2E-P06 | P06 | 分别提问、只读分析、写文档、改代码 | 四类回复/卡片与权限匹配 | 只读零写入；写入有真实文件证据 |
 | E2E-P07 | P07 | 运行中普通追加、显式排队、停止 | 追加数、队列位置和停止影响清楚 | 同会话/同项目串行，无隐式撤销 |
 | E2E-P08 | P08 | 切模型/推理、查看额度、申请和撤销临时完全访问 | 设置只作用下一轮；额度来源真实 | 租约作用域和过期回落正确 |
@@ -64,7 +64,7 @@
 | E2E-N03 | 断开一个/两个事件消费者 | N30～N32 | 降级/离线和采样时间 | 离线仍接受或承诺执行任务 |
 | E2E-N04 | 破坏 PID 或配置路径一致性 | N34 | install/status 失败关闭 | 在错误实例上显示健康 |
 | E2E-N05 | 移动当前项目目录 | N39 | 项目不可用、绑定保留 | 静默切换到同名目录 |
-| E2E-N06 | 恢复不存在的 thread | N41 | 明确无法恢复并提供新会话 | 假装旧上下文已恢复 |
+| E2E-N06 | 恢复不存在/跨项目 thread；运行中尝试打开或改绑；模拟桌面端不可用；本机另开 thread | N41、N43、N46 | 明确拒绝或显示未打开，并给出同 thread 降级命令 | 假装恢复/打开、取消现有任务、静默改绑或创建替代 thread |
 
 ### 3.2 任务、模型、权限与交互
 

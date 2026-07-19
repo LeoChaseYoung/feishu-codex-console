@@ -15,6 +15,7 @@ import {
   type CodexModel,
   type CodexThreadSummary,
 } from "./codex-runner.js";
+import { openCodexThreadInDesktop } from "./desktop-handoff.js";
 import type {
   CodexApprovalDecision,
   CodexApprovalRequest,
@@ -157,6 +158,11 @@ import {
   type RunbookDefinition,
 } from "./runbooks.js";
 import { renderSessionCenterCard } from "./session-card.js";
+import {
+  assessSessionHandoff,
+  deriveThreadActivity,
+  type SessionCenterItem,
+} from "./session-handoff.js";
 import { sessionNameFromPrompt } from "./session-naming.js";
 import { sanitizeSessionPreview } from "./session-preview.js";
 import { StateStore } from "./state-store.js";
@@ -433,6 +439,7 @@ interface V5CardActionValue {
     | "session_compact"
     | "session_new"
     | "session_settings"
+    | "session_open_desktop"
     | "session_refresh"
     | "tasks_stop"
     | "tasks_cancel_one"
@@ -1426,7 +1433,7 @@ async function replySessionCenter(
     project.path,
     currentThreadId,
     await runner.listThreads(project.path, 50),
-  ).slice(0, 12);
+  ).slice(0, 50);
   const snapshot = {
     projectName: project.name,
     sessions,
@@ -1453,7 +1460,7 @@ async function replySessionCenter(
   } catch (error) {
     console.error("[bridge] session center card unavailable", error);
     const lines = sessions.slice(0, 10).map((session, index) =>
-      `${index + 1}. ${session.name || session.preview || session.id.slice(0, 8)}\n   ${session.id}`,
+      `${index + 1}. ${session.name || session.preview || session.id.slice(0, 8)} · ${session.activitySource === "feishu" ? "飞书更新" : session.activitySource === "desktop" ? "本机更新" : "来源未知"}\n   ${session.id}`,
     );
     await productReply(
       event.message_id,
@@ -4949,9 +4956,32 @@ async function handleV5CardAction(
         await updateSessionCard(event, record, "该会话已不存在，或不属于当前项目。");
         return;
       }
-      const active = runner.cancel(record.conversationKey);
-      const queued = queue.cancelPending(record.conversationKey);
-      await closeRuntimeInteractionsForConversation(record.conversationKey);
+      if (state.getThread(record.conversationKey) === selected.id) {
+        await updateSessionCard(event, record, "当前已经是这个会话，无需重复绑定。");
+        return;
+      }
+      const handoff = assessSessionHandoff(
+        runner.getActiveTask(record.conversationKey) ??
+          queue.getActiveTask(record.conversationKey),
+        queue.queuedForConversation(record.conversationKey),
+      );
+      if (handoff.blocked) {
+        await audit(
+          event.operator_id,
+          "session.bind_local",
+          "session",
+          selected.id,
+          "denied",
+          `busy active=${handoff.active ? 1 : 0} queued=${handoff.queued}`,
+        );
+        await updateSessionCard(
+          event,
+          record,
+          `当前还有${handoff.active ? "运行中的任务" : ""}${handoff.active && handoff.queued > 0 ? "和" : ""}${handoff.queued > 0 ? `${handoff.queued} 个排队任务` : ""}；请等待完成或先停止任务，再绑定其他会话。`,
+        );
+        return;
+      }
+      const alreadyOwned = state.listOwnedThreadIds(record.ownerId, project.path).has(selected.id);
       await state.setThread(record.conversationKey, selected.id);
       await state.registerThreadAccess(
         selected.id,
@@ -4959,11 +4989,17 @@ async function handleV5CardAction(
         record.ownerId,
         project.path,
       );
-      await audit(event.operator_id, "session.resume", "session", selected.id, "allowed");
+      await audit(
+        event.operator_id,
+        alreadyOwned ? "session.resume" : "session.bind_local",
+        "session",
+        selected.id,
+        "allowed",
+      );
       await updateSessionCard(
         event,
         record,
-        `已恢复“${selected.name || selected.preview || selected.id.slice(0, 8)}” · 停止 ${active ? 1 : 0} 个运行任务、${queued} 个排队任务。`,
+        `${alreadyOwned ? "已继续" : "已绑定本地会话"}“${selected.name || selected.preview || selected.id.slice(0, 8)}”；后续飞书消息会进入同一段 Codex 上下文。`,
       );
       return;
     }
@@ -4982,6 +5018,85 @@ async function handleV5CardAction(
       await replyControlCenter(event, "", "session-settings", record);
       await updateSessionCard(event, record, "控制中心已发送到下方。");
       return;
+    case "session_open_desktop": {
+      const threadId = state.getThread(record.conversationKey);
+      if (!threadId) {
+        await updateSessionCard(event, record, "当前还没有可在本机打开的会话。");
+        return;
+      }
+      const handoff = assessSessionHandoff(
+        runner.getActiveTask(record.conversationKey) ??
+          queue.getActiveTask(record.conversationKey),
+        queue.queuedForConversation(record.conversationKey),
+      );
+      if (handoff.blocked) {
+        await audit(
+          event.operator_id,
+          "session.desktop_open",
+          "session",
+          threadId,
+          "denied",
+          `busy active=${handoff.active ? 1 : 0} queued=${handoff.queued}`,
+        );
+        await updateSessionCard(
+          event,
+          record,
+          "为避免飞书和本机同时写入同一会话，请先等待当前任务完成并清空队列。",
+        );
+        return;
+      }
+      const project = await currentProject(record.conversationKey, record.ownerId);
+      const session = (await runner.listThreads(project.path, 50)).find(
+        (candidate) => candidate.id === threadId,
+      );
+      if (!session) {
+        await audit(
+          event.operator_id,
+          "session.desktop_open",
+          "session",
+          threadId,
+          "denied",
+          "thread missing or project mismatch",
+        );
+        await updateSessionCard(
+          event,
+          record,
+          "当前会话已不存在，或不再属于这个项目。请刷新并重新选择会话。",
+        );
+        return;
+      }
+      const result = await openCodexThreadInDesktop(threadId);
+      const sessionLabel = session.name || session.preview || threadId.slice(0, 8);
+      if (result.status === "opened") {
+        await audit(
+          event.operator_id,
+          "session.desktop_open",
+          "session",
+          threadId,
+          "allowed",
+        );
+        await updateSessionCard(
+          event,
+          record,
+          `已在本机 Codex 打开“${sessionLabel}”。你可以继续原生对话；飞书卡片和按钮不会写入 Codex 历史。`,
+        );
+        return;
+      }
+      await audit(
+        event.operator_id,
+        "session.desktop_open",
+        "session",
+        threadId,
+        "denied",
+        `${result.status}: ${result.reason ?? "unknown"}`,
+      );
+      await updateSessionCard(
+        event,
+        record,
+        `${result.status === "unsupported" ? "当前系统暂不支持自动打开" : "本机 Codex 打开失败"}。可在本机终端继续同一会话：${result.fallbackCommand}`,
+      );
+      return;
+    }
     case "session_refresh":
       await updateSessionCard(event, record, "会话列表已刷新。");
       return;
@@ -5528,7 +5643,7 @@ async function updateSessionCard(
     project.path,
     currentThreadId,
     await runner.listThreads(project.path, 50),
-  ).slice(0, 12);
+  ).slice(0, 50);
   const snapshot = {
     projectName: project.name,
     sessions,
@@ -6299,7 +6414,7 @@ function visibleSessions(
   projectPath: string,
   currentThreadId: string | undefined,
   sessions: CodexThreadSummary[],
-): CodexThreadSummary[] {
+): SessionCenterItem[] {
   let visible = sessions;
   if (!canAdminister(config, ownerId)) {
     const owned = state.listOwnedThreadIds(ownerId, projectPath);
@@ -6325,7 +6440,22 @@ function visibleSessions(
       : session.name
         ? redactSensitiveText(sanitizeSessionPreview(session.name), 120)
         : null;
-    return { ...session, name, preview };
+    const latestFeishuActivityAt = latestTask
+      ? latestTask.progress.finishedAt ??
+        latestTask.progress.startedAt ??
+        latestTask.progress.createdAt
+      : undefined;
+    const activity = deriveThreadActivity({
+      threadUpdatedAt: session.updatedAt,
+      ...(latestFeishuActivityAt === undefined ? {} : { latestFeishuActivityAt }),
+    });
+    return {
+      ...session,
+      name,
+      preview,
+      activitySource: activity.source,
+      activityAt: activity.activityAt,
+    };
   });
 }
 
@@ -7077,6 +7207,7 @@ function parseCardActionValue(event: FeishuCardActionEvent): CardActionValue | n
           "session_compact",
           "session_new",
           "session_settings",
+          "session_open_desktop",
           "session_refresh",
           "tasks_stop",
           "tasks_cancel_one",
