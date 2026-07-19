@@ -68,8 +68,8 @@ npx feishu-codex-console@next init
 从源码安装：
 
 ```bash
-git clone https://github.com/LeoChaseYoung/feishu-codex-bridge.git
-cd feishu-codex-bridge
+git clone https://github.com/LeoChaseYoung/feishu-codex-console.git
+cd feishu-codex-console
 npm install
 npx lark-cli config init --new
 npx lark-cli whoami --as bot
