@@ -1,6 +1,6 @@
 # 发布检查清单
 
-这份清单用于预发布版本和稳定版本。Git 标签必须与 `package.json` 版本完全一致。
+这份清单用于预发布版本和稳定版本。Git 标签必须与 `package.json` 版本完全一致。发布或认证出现异常时，先执行 [npm 发布与认证运行手册](NPM_RELEASE_AUTH_RUNBOOK.md)；不得用重复登录、索要验证码或发布空版本绕过停止条件。
 
 ## 自动门禁
 
@@ -13,6 +13,8 @@
 - [ ] `version --json` 与兼容矩阵中的 Codex、lark-cli、配置、状态和 SQLite 版本一致。
 - [ ] `npm run release:check -- v<version>` 通过。
 - [ ] npm 发布通过 GitHub OIDC Trusted Publisher 生成 provenance，仓库和 Environment 中不存在长期 `NPM_TOKEN`，预发布版本进入 `next` dist-tag。
+- [ ] 通道符合版本契约：预发布只要求 `next` 指向目标版本，稳定版才要求 `latest` 指向目标版本。
+- [ ] 发布验证只读取 GitHub Actions 和公开 Registry；没有用本机 `npm whoami` 判断 OIDC 发布成败，也没有把网页登录误当作 CLI 授权。
 
 这些门禁由 CI 和 Release workflow 执行；任一平台失败都不会进入 npm publish。
 
@@ -70,3 +72,4 @@
 - [ ] GitHub Release notes 清楚标记 prerelease/stable，并给出升级与回滚方法。
 - [ ] 中英文入口、配置参考、兼容矩阵、演示、Roadmap 和 Good First Issue 入口与当前版本一致。
 - [ ] 发布后从 npm 注册表重新安装一次，并核对 CLI 版本和 dist-tag。
+- [ ] 如果 CLI 授权进入邮件缺失、`Invalid OTP` 或同路径二次失败，已终止登录并按运行手册记录外部阻塞；任何验证码、恢复码和 Token 均未进入聊天或日志。

@@ -564,6 +564,8 @@ npm run release:check -- v$(node -p "require('./package.json').version")
 - tag、`package.json` 和 GitHub Release 版本完全一致。
 - Ubuntu、macOS、tarball 和真实飞书端到端均通过。
 - npm 使用 GitHub OIDC Trusted Publisher 和 provenance，不保存长期 `NPM_TOKEN`。
+- 预发布只验证 `next`，稳定版才验证 `latest`；本机 `npm whoami` 不用于判断 OIDC 发布结果。
+- CLI/OTP 认证失败必须执行 [npm 发布与认证运行手册](NPM_RELEASE_AUTH_RUNBOOK.md) 的一次性停止规则，不重复登录、不索要秘密、不发布空版本绕过认证。
 - tarball 不包含 `.env`、SQLite、日志、附件、真实 ID 或个人路径。
 - 用户可见变化、迁移影响、正向 SOP、逆向 SOP 和验收矩阵同时更新。
 - 多 Agent 编排当前不进入主线；只记录在 Roadmap，默认保持关闭。

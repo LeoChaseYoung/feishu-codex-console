@@ -233,6 +233,8 @@ npx feishu-codex-console@next migrate --from /absolute/path/to/old/feishu-codex-
 
 标签必须与 `package.json` 完全一致，例如 `1.0.0-beta.4` 对应 `v1.0.0-beta.4`。
 
+预发布版本只进入 npm `next`，稳定版才进入 `latest`。GitHub OIDC 发布成功不等于本机 npm CLI 已登录，`npm whoami` 的 401 也不能反推发布失败；正常发布不需要运行 `npm login`。认证或 dist-tag 出现异常时必须按 [npm 发布与认证运行手册](NPM_RELEASE_AUTH_RUNBOOK.md) 的停止条件处理，不得反复进入邮箱 OTP 或索要验证码。
+
 Ubuntu 与 macOS 的自动门禁、两端实机验证和飞书团队权限验收见 [发布检查清单](RELEASE_CHECKLIST.md)。安装异常见 [故障排查](TROUBLESHOOTING.md)，所有环境变量见 [配置参考](CONFIGURATION.md)。
 
 面向使用者和测试人员的完整流程：

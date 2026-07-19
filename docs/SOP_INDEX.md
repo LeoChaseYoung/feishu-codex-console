@@ -59,6 +59,7 @@ Feishu Codex Console 是一个本地优先的 Codex 远程工作会话层：飞�
 | [故障排查](TROUBLESHOOTING.md) | 根据错误文本定位常见问题 | 与逆向 SOP 配合使用 |
 | [产品需求地图](PRODUCT_REQUIREMENTS_MAP.md) | 理解 D1～D10 的产品边界 | 产品和研发的需求依据 |
 | [发布检查清单](RELEASE_CHECKLIST.md) | npm/GitHub Release 前门禁 | 维护者逐项签字 |
+| [npm 发布与认证运行手册](NPM_RELEASE_AUTH_RUNBOOK.md) | OIDC 发布、dist-tag、CLI/OTP 失败 | 先判定版本通道，再执行一次性停止规则 |
 
 ## 5. 正向与逆向对应表
 
