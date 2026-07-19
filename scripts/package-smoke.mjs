@@ -45,6 +45,26 @@ try {
     throw new Error("Installed CLI did not expose its version through --version.");
   }
   run(compatibilityCli, ["-v"], installDir);
+  const emptyInstallStatus = JSON.parse(
+    runExpectFailure(
+      cli,
+      ["install-status", "--json", "--config", path.join(sandbox, "missing.env")],
+      installDir,
+    ),
+  );
+  if (emptyInstallStatus.ready !== false || emptyInstallStatus.nextAction?.code !== "run_init") {
+    throw new Error("Installed CLI did not expose the machine-readable installation contract.");
+  }
+  const failedDoctor = JSON.parse(
+    runExpectFailure(
+      cli,
+      ["doctor", "--json", "--config", path.join(sandbox, "missing.env")],
+      installDir,
+    ),
+  );
+  if (failedDoctor.ok !== false || failedDoctor.summary?.failed !== 1) {
+    throw new Error("Installed CLI did not expose the machine-readable doctor contract.");
+  }
   runExpectFailure(
     cli,
     [
@@ -126,7 +146,7 @@ try {
     if (configMode !== 0o600) throw new Error(`Config mode is ${configMode.toString(8)}, expected 600.`);
     if (dataMode !== 0o700) throw new Error(`Data mode is ${dataMode.toString(8)}, expected 700.`);
   }
-  console.log("Package smoke test passed: packed, installed, verified CLI aliases, resumed, initialized runbooks, and previewed a safe upgrade.");
+  console.log("Package smoke test passed: packed, installed, verified CLI and JSON contracts, resumed, initialized runbooks, and previewed a safe upgrade.");
 } finally {
   await rm(sandbox, { recursive: true, force: true });
   if (archive) await rm(path.join(packageRoot, archive), { force: true });

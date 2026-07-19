@@ -1,6 +1,6 @@
 # Feishu Codex Console
 
-[10 分钟快速上手](docs/QUICKSTART.md) · [全项目 SOP](docs/SOP_INDEX.md) · [正向流程](docs/USER_SOP.md) · [逆向恢复](docs/FAILURE_RECOVERY_SOP.md) · [English](README.en.md) · [安装](docs/INSTALLATION.md) · [配置](docs/CONFIGURATION.md) · [兼容与升级](docs/COMPATIBILITY.md) · [Roadmap](ROADMAP.md)
+[让 Codex 帮你安装](docs/INSTALL_WITH_CODEX.md) · [10 分钟快速上手](docs/QUICKSTART.md) · [全项目 SOP](docs/SOP_INDEX.md) · [正向流程](docs/USER_SOP.md) · [逆向恢复](docs/FAILURE_RECOVERY_SOP.md) · [English](README.en.md) · [安装](docs/INSTALLATION.md) · [配置](docs/CONFIGURATION.md) · [兼容与升级](docs/COMPATIBILITY.md) · [Roadmap](ROADMAP.md)
 
 把本地 Codex thread 映射成一个可持续交流、可以协作和接管的飞书工作会话。人在外面时，可以在飞书里继续提问、分析、写文件、修改代码、回答 Codex 追问并处理权限确认；本机不需要开放公网端口。
 
@@ -55,6 +55,14 @@ flowchart LR
 
 要求：macOS 或 Linux、Node.js 22 或更高版本、本机已完成 `codex login`，并已配置可接收消息事件的飞书自建应用。项目会安装并优先使用固定版本的 `lark-cli`。
 
+不想手动走命令时，把这句话发给本机 Codex：
+
+```text
+请严格按照 https://github.com/LeoChaseYoung/feishu-codex-console/blob/main/docs/INSTALL_WITH_CODEX.md 帮我安装并验证；不克隆源码，不索要或回显任何秘密，遇到官方登录、飞书权限差异和应用发布时暂停让我确认。
+```
+
+Codex 会运行同一个公开安装向导，并通过 `install-status --json` 和 `doctor --json` 判断真实状态。团队已有固定部署时，其他成员**不需要安装**，只需由管理员加入对应项目群。完整的人机边界和可复制提示词见 [让 Codex 帮你安装](docs/INSTALL_WITH_CODEX.md)。
+
 当前仍是公开测试版，推荐通过 `next` 通道使用交互式向导：
 
 ```bash
@@ -63,7 +71,7 @@ npx feishu-codex-console@next init
 
 向导会检查 Node、Codex 登录和飞书 Bot 身份，发现项目群权限缺失或无法核验时，会打开飞书官方确认页，一键申请**本产品所需的最小权限**；用户只需核对差异并确认，不需要搜索 scope。随后向导会识别 `open_id`/`chat_id`、选择安全预设，并以 `0600` 权限写入配置，最后安装 macOS LaunchAgent 或 Linux systemd user service。
 
-第一次部署直接看 [10 分钟快速上手](docs/QUICKSTART.md)。从安装、日常使用、团队协作到升级卸载的统一入口是 [全项目 SOP 总览](docs/SOP_INDEX.md)；团队上线按 [全项目正向 SOP](docs/USER_SOP.md) 和 [全项目逆向与恢复 SOP](docs/FAILURE_RECOVERY_SOP.md) 验收，自动化与实机边界见 [验收测试矩阵](docs/ACCEPTANCE_TEST_MATRIX.md)。完整步骤见 [安装指南](docs/INSTALLATION.md)，全部配置见 [配置参考](docs/CONFIGURATION.md)，常见问题见 [故障排查](docs/TROUBLESHOOTING.md)，五分钟完整闭环见 [产品演示](docs/DEMO.md)。产品方向和逐项需求见 [产品需求地图](docs/PRODUCT_REQUIREMENTS_MAP.md)，公开路线见 [Roadmap](ROADMAP.md)，版本与依赖承诺见 [兼容矩阵](docs/COMPATIBILITY.md)。
+第一次部署可以让 [Codex 代跑安装](docs/INSTALL_WITH_CODEX.md)，也可以直接看 [10 分钟快速上手](docs/QUICKSTART.md)。从安装、日常使用、团队协作到升级卸载的统一入口是 [全项目 SOP 总览](docs/SOP_INDEX.md)；团队上线按 [全项目正向 SOP](docs/USER_SOP.md) 和 [全项目逆向与恢复 SOP](docs/FAILURE_RECOVERY_SOP.md) 验收，自动化与实机边界见 [验收测试矩阵](docs/ACCEPTANCE_TEST_MATRIX.md)。完整步骤见 [安装指南](docs/INSTALLATION.md)，全部配置见 [配置参考](docs/CONFIGURATION.md)，常见问题见 [故障排查](docs/TROUBLESHOOTING.md)，五分钟完整闭环见 [产品演示](docs/DEMO.md)。产品方向和逐项需求见 [产品需求地图](docs/PRODUCT_REQUIREMENTS_MAP.md)，公开路线见 [Roadmap](ROADMAP.md)，版本与依赖承诺见 [兼容矩阵](docs/COMPATIBILITY.md)。
 
 从源码安装：
 

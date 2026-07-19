@@ -4,6 +4,8 @@
 
 > 当前仍是公开测试版，请使用 `@next` 安装。管理员只需在运行 Codex 的电脑上部署一次，其他团队成员不需要安装 Node.js、Codex 或本项目。
 
+> 不想手动执行下面的步骤？把 [“让 Codex 帮你安装”提示词](INSTALL_WITH_CODEX.md) 复制给本机 Codex。它会代跑检查和向导，并在账号登录、App Secret、飞书权限差异和应用发布处暂停让你确认。
+
 ## 先理解它怎么工作
 
 ```text
@@ -78,9 +80,12 @@ npx feishu-codex-console@next init
 安装完成后检查：
 
 ```bash
+npx feishu-codex-console@next install-status --json
 npx feishu-codex-console@next status
-npx feishu-codex-console@next doctor
+npx feishu-codex-console@next doctor --json
 ```
+
+机器验收只看真实字段：`install-status.ready` 和 `doctor.ok` 都必须为 `true`。本地已就绪但 `testCardDelivered` 为 `false` 时，只需到飞书完成消息验证，不要重装服务。
 
 能力检查分两层：Bot、消息事件和卡片事件失败会阻断安装；自动建群、邀请成员和置顶权限会显示为“已验证 / 缺失 / 当前无法确认”，不会阻断只使用私聊。第一次创建项目群时，Bridge 会按步骤再次验证，并把具体失败项显示在卡片上。
 

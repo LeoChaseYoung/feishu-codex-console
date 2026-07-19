@@ -26,6 +26,8 @@
 
 **执行者：** 部署者或团队管理员。
 
+非开发者可以把 [让 Codex 帮你安装](INSTALL_WITH_CODEX.md) 中的完整提示词交给本机 Codex。Codex 只代跑环境检查、公开 npm 向导和机器验收；账号登录、App Secret、飞书权限差异与应用发布仍由部署者在官方页面完成。团队已经有固定主机时，成员不重复安装，只加入对应项目群。
+
 ### 前置条件
 
 - macOS，或支持 systemd user service 的 Linux。
@@ -76,7 +78,8 @@ npx feishu-codex-console@next configure-feishu
 npx lark-cli config init --new
 npx feishu-codex-console@next configure-feishu
 npx feishu-codex-console@next init
-npx feishu-codex-console@next doctor
+npx feishu-codex-console@next install-status --json
+npx feishu-codex-console@next doctor --json
 ```
 
 按向导在飞书私聊机器人发送测试消息。安装结束后，在飞书发送：
@@ -98,11 +101,11 @@ npx feishu-codex-console@next doctor
 ### 验收证据
 
 ```bash
-npx feishu-codex-console@next status
-npx feishu-codex-console@next doctor
+npx feishu-codex-console@next install-status --json
+npx feishu-codex-console@next doctor --json
 ```
 
-两条命令无失败项，飞书中的项目和权限与本机事实一致。
+`install-status.ready` 和 `doctor.ok` 均为 `true`，再由部署者在飞书发送“状态”并确认真实回复。`testCardDelivered: false` 只表示飞书验证未完成，不允许因此删除配置或重装服务。
 
 **失败转入：** N01～N05、N30～N34、N55～N58。
 

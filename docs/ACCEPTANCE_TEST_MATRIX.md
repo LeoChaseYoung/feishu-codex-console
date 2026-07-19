@@ -8,7 +8,7 @@
 
 | SOP 范围 | 核心能力 | 自动化证据 |
 |---|---|---|
-| P01～P02 / N01～N05 | 安装探测、身份发现、断点恢复、配置安全 | `test/capability-probe.test.mjs`、`test/discovery-lib.test.mjs`、`test/install-state.test.mjs`、`test/setup-lib.test.mjs`、`test/config-file.test.mjs` |
+| P01～P02 / N01～N05 | 安装探测、身份发现、断点恢复、配置安全与机器验收契约 | `test/capability-probe.test.mjs`、`test/discovery-lib.test.mjs`、`test/install-state.test.mjs`、`test/install-status.test.mjs`、`test/doctor-report.test.ts`、`test/setup-lib.test.mjs`、`test/config-file.test.mjs` |
 | P02～P03 / N30～N34 | 服务健康、PID/配置一致性、双消费者状态 | `test/service-health.test.mjs`、`test/health-file.test.ts`、`test/device-health.test.ts`、`test/device-recovery.test.ts` |
 | P03 / N55～N61 | 自适应首页、控制台、首次成功和远程就绪 | `test/home-card.test.ts`、`test/device-card.test.ts`、`test/onboarding-card.test.ts`、`test/remote-ready.test.ts` |
 | P04 / N35～N40 | 项目发现、排名、收藏、ACL、Git 状态和本地快照 | `test/project-registry.test.ts`、`test/project-card.test.ts`、`test/project-policy.test.ts`、`test/project-status.test.ts`、`test/project-overview.test.ts` |
@@ -32,7 +32,7 @@
 
 | ID | SOP | 操作 | 预期 UI | 权威证据 |
 |---|---|---|---|---|
-| E2E-P01 | P01～P02 | 非开发者账号全新 `init`，私聊测试消息 | 安装成功卡字段真实 | 健康文件 PID/配置正确，双消费者 ready |
+| E2E-P01 | P01～P02 | 非开发者分别按手动路径和“让 Codex 帮我安装”路径全新 `init`，私聊测试消息 | 助手在官方安全确认处暂停；安装成功卡字段真实 | `install-status.ready=true`、`doctor.ok=true`，健康文件 PID/配置正确，双消费者 ready |
 | E2E-P02 | P02 | 运行新手引导和第一次只读项目任务 | 引导只在真实成功后完成 | 零文件变化、零写权限租约消费 |
 | E2E-P03 | P03 | 打开首页、控制台，断开再恢复事件连接 | 状态和采样时间真实，恢复通知去重 | 健康快照与 UI 一致 |
 | E2E-P04 | P04 | 搜索两个同名项目、收藏、切换并读取项目 | 路径可辨识，影响确认正确 | `读取项目` 零模型调用、零文件变化 |
@@ -59,7 +59,7 @@
 
 | ID | 故障注入 | 对应 N | 必须看到 | 必须确认没有发生 |
 |---|---|---|---|---|
-| E2E-N01 | 使用无效 Bot 身份或移除消息事件 | N01～N02 | 安装阻断和精确修复动作 | 虚假安装成功、不可用服务启动 |
+| E2E-N01 | 使用无效 Bot 身份、移除消息事件或让同一认证路径失败一次 | N01～N02 | 安装阻断、精确修复动作；助手停止等待用户 | 虚假安装成功、不可用服务启动、重复 OTP/登录、索要秘密 |
 | E2E-N02 | 移除项目群增强 scope | N03～N04 | 私聊可用、增强能力缺失/未知 | 把未知显示为已验证 |
 | E2E-N03 | 断开一个/两个事件消费者 | N30～N32 | 降级/离线和采样时间 | 离线仍接受或承诺执行任务 |
 | E2E-N04 | 破坏 PID 或配置路径一致性 | N34 | install/status 失败关闭 | 在错误实例上显示健康 |

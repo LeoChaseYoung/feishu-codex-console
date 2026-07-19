@@ -4,6 +4,11 @@ All notable changes are recorded here. Versions follow Semantic Versioning while
 
 ## Unreleased
 
+### Added
+
+- An official “install with Codex” onboarding path for non-developer testers, with a copyable safety contract, clear human confirmation points, team-host guidance, and no source clone requirement.
+- Machine-readable `install-status --json` and `doctor --json` reports so installation assistants can verify the live service, both event consumers, diagnostics, and the next safe action without parsing terminal prose or exposing recorded error details.
+
 ## 1.0.0-beta.10 - 2026-07-19
 
 ### Added

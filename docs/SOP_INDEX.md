@@ -50,6 +50,7 @@ Feishu Codex Console 是一个本地优先的 Codex 远程工作会话层：飞�
 
 | 文档 | 适用场景 | 使用方式 |
 |---|---|---|
+| [让 Codex 帮你安装](INSTALL_WITH_CODEX.md) | 非开发者自托管或邀请体验者 | 复制提示词；Codex 代跑，本人只做官方安全确认 |
 | [全项目正向 SOP](USER_SOP.md) | 从安装到卸载的正常操作 | 按 P01～P20 顺序执行，或按角色选择章节 |
 | [全项目逆向与恢复 SOP](FAILURE_RECOVERY_SOP.md) | 失败、误操作、断线和安全事件 | 先执行 R00，再按 N 编号恢复 |
 | [验收测试矩阵](ACCEPTANCE_TEST_MATRIX.md) | 自动测试、真实飞书验收、发布签字 | 将 P/N 编号映射到测试证据 |
