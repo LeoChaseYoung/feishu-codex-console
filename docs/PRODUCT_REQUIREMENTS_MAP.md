@@ -90,6 +90,7 @@ Feishu Codex Console 是一个开源、本地优先的 Codex 远程工作会话�
 - 自动识别 `open_id`、`chat_id` 和会话类型。
 - 私有配置和数据目录。
 - `doctor` 与后台服务安装。
+- Codex 辅助安装提示词，以及 `install-status --json` / `doctor --json` 机器验收契约。
 
 ### MVP 需求
 
@@ -99,6 +100,7 @@ Feishu Codex Console 是一个开源、本地优先的 Codex 远程工作会话�
 - 自检失败时不安装服务，并给出下一条修复命令。
 - 安装完成后主动生成第一张飞书引导卡。
 - 已有安装可安全重跑，不覆盖未知配置。
+- 安装助手在官方登录、Secret、权限差异和发布步骤暂停，只恢复持久化的下一安全步骤。
 
 ### 验收标准
 
@@ -106,6 +108,7 @@ Feishu Codex Console 是一个开源、本地优先的 Codex 远程工作会话�
 - 安装过程不要求用户手工编辑 30 多个环境变量。
 - 配置文件为 `0600`，数据目录为 `0700`。
 - 安装失败时没有裸堆栈或模糊错误。
+- 只有本地 `ready/ok` 与飞书真实回复同时成立，才声明端到端安装完成。
 
 ### 待讨论决策
 
@@ -130,6 +133,7 @@ Feishu Codex Console 是一个开源、本地优先的 Codex 远程工作会话�
 - 配置更新：备份并合并已知键，保留未知高级配置。
 - 完成标准：doctor、服务健康和端到端测试卡全部成功。
 - 详细 PRD：[D1 安装与首次连接](requirements/D1_INSTALLATION_AND_FIRST_CONNECTION.md)。
+- 非开发者入口：[让 Codex 帮你安装](INSTALL_WITH_CODEX.md)。
 
 ---
 

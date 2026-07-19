@@ -8,6 +8,8 @@ The bridge is local-first and outbound-only. It maps a local Codex thread to a d
 
 Requirements: macOS or Linux, Node.js 22+, a local `codex login`, and a Feishu custom app with Bot, long-connection message events, and CardKit enabled.
 
+Non-developer testers can copy the guarded prompt from [Install with Codex](docs/INSTALL_WITH_CODEX.md) into their local Codex. It runs this same public installer without cloning the repository, pauses for official account/permission confirmations, and verifies machine-readable state. Members joining an existing team host do not install anything locally.
+
 ```bash
 npx feishu-codex-console@next init
 ```
@@ -59,6 +61,8 @@ Ordinary messages are routed locally as answers, read-only analysis, file/conten
 ## Operations
 
 ```bash
+feishu-codex-bridge install-status --json
+feishu-codex-bridge doctor --json
 feishu-codex-bridge doctor --fix
 feishu-codex-bridge support-bundle
 feishu-codex-bridge backup
@@ -70,6 +74,7 @@ An upgrade is a read-only preview until `--yes` is added. It blocks live-task re
 
 ## Documentation
 
+- [Install with Codex](docs/INSTALL_WITH_CODEX.md)
 - [Full product SOP index](docs/SOP_INDEX.md)
 - [Positive user SOP](docs/USER_SOP.md)
 - [Negative and recovery SOP](docs/FAILURE_RECOVERY_SOP.md)

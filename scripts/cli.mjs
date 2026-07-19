@@ -19,6 +19,7 @@ import {
 } from "./setup-lib.mjs";
 import { discoverFeishuIdentity } from "./discovery-lib.mjs";
 import { detectExistingInstallation } from "./install-detection.mjs";
+import { inspectInstallStatus } from "./install-status.mjs";
 import { probeFeishuCapabilities } from "./capability-probe.mjs";
 import { readEnvFile, writeManagedConfig } from "./config-file.mjs";
 import { sendInstallationCard } from "./install-card.mjs";
@@ -57,7 +58,11 @@ try {
   else if (command === "configure-feishu" || command === "permissions") {
     await configureFeishu(flags);
   }
-  else if (command === "doctor") runProjectCommand("doctor", flags);
+  else if (command === "doctor") {
+    const status = runProjectCommand("doctor", flags, !flags.json);
+    if (flags.json && status !== 0) process.exitCode = status;
+  }
+  else if (command === "install-status") await printInstallStatus(flags);
   else if (command === "backup") runDataCommand("backup", flags);
   else if (command === "backups") runDataCommand("list", flags);
   else if (command === "rollback") runDataCommand("rollback", flags);
@@ -507,6 +512,30 @@ async function printVersionInfo(options) {
   console.log(`平台：${info.platforms.join(" / ")}`);
 }
 
+async function printInstallStatus(options) {
+  const configFile = resolveConfig(options);
+  const report = await inspectInstallStatus({
+    configFile,
+    instanceId: options.instance ?? "default",
+  });
+  if (options.json) {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    console.log("Feishu Codex Console 安装状态");
+    console.log(`进度：${report.phase}`);
+    console.log(`配置：${report.config.exists ? "已写入" : "未创建"} · ${report.config.path}`);
+    console.log(
+      `服务：${report.ready ? "已就绪" : report.service.running ? "运行但未通过健康检查" : "未就绪"}`,
+    );
+    console.log(
+      `事件连接：${report.health.readyConsumers}/${report.health.totalConsumers} · ${report.health.reason}`,
+    );
+    console.log(`下一步：${report.nextAction.instruction}`);
+    if (report.nextAction.command) console.log(`命令：${report.nextAction.command}`);
+  }
+  if (!report.ready) process.exitCode = 1;
+}
+
 async function initializeRunbooks(options) {
   const projectDir = path.resolve(options.project ?? process.cwd());
   const result = await initializeRunbookTemplate({
@@ -813,10 +842,11 @@ function runProjectCommand(name, options, throwOnFailure = true) {
   const configFile = resolveConfig(options);
   const target = name === "doctor" ? path.join(packageRoot, "dist", "doctor.js") : null;
   if (!target) throw new Error(`未知项目命令：${name}`);
-  const commandArgs = [target];
+  const commandArgs = ["--disable-warning=ExperimentalWarning", target];
   if (name === "doctor") {
     if (options.fix) commandArgs.push("--fix");
     if (options.diagnostics) commandArgs.push("--diagnostics", path.resolve(options.diagnostics));
+    if (options.json) commandArgs.push("--json");
   }
   const result = spawnSync(process.execPath, commandArgs, {
     cwd: packageRoot,
@@ -973,7 +1003,8 @@ function printHelp() {
   feishu-codex-bridge migrate --from <旧源码目录> [选项]
   feishu-codex-bridge discover [--timeout 2m]
   feishu-codex-bridge configure-feishu [--profile all|core|project-chat|ordinary-group]
-  feishu-codex-bridge doctor [--config <文件>] [--fix] [--diagnostics <JSON 文件>]
+  feishu-codex-bridge doctor [--config <文件>] [--fix] [--diagnostics <JSON 文件>] [--json]
+  feishu-codex-bridge install-status [--config <文件>] [--json]
   feishu-codex-bridge install|status|stop|restart|uninstall [--config <文件>]
   feishu-codex-bridge backup|backups [--config <文件>]
   feishu-codex-bridge rollback --backup <备份 ID> --yes [--config <文件>]

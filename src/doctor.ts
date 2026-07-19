@@ -2,7 +2,6 @@ import "dotenv/config";
 
 import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
-import { homedir } from "node:os";
 import path from "node:path";
 
 import { loadConfig } from "./config.js";
@@ -12,11 +11,11 @@ import {
   type DoctorCheckResult,
 } from "./diagnostics.js";
 import { assessProjectChatScopes } from "./doctor-capabilities.js";
+import { buildDoctorReport } from "./doctor-report.js";
 import { readProjectChatRuntimeEvidence } from "./doctor-runtime-evidence.js";
 import { ProjectRegistry } from "./project-registry.js";
 import {
   installConsoleRedaction,
-  redactDiagnosticText,
   safeErrorText,
 } from "./redaction.js";
 
@@ -24,6 +23,7 @@ installConsoleRedaction();
 
 interface DoctorOptions {
   fix: boolean;
+  json: boolean;
   diagnostics?: string;
 }
 
@@ -77,7 +77,7 @@ async function main(): Promise<void> {
     });
   } catch (error) {
     results.push({ label: "配置", status: "failed", detail: safeErrorText(error) });
-    print(results);
+    print(results, options.json);
     process.exitCode = 1;
     return;
   }
@@ -212,7 +212,7 @@ async function main(): Promise<void> {
     }
   }
 
-  print(results);
+  print(results, options.json);
   if (results.some((result) => result.status === "failed")) process.exitCode = 1;
 }
 
@@ -256,25 +256,29 @@ function run(
   });
 }
 
-function print(results: DoctorCheckResult[]): void {
+function print(results: DoctorCheckResult[], json: boolean): void {
+  const report = buildDoctorReport(results);
+  if (json) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
   console.log("Feishu Codex Bridge V5 自检");
-  for (const result of results) {
+  for (const result of report.checks) {
     const marker = result.status === "ok" ? "通过" : result.status === "warning" ? "提醒" : "失败";
-    console.log(
-      `${marker.padEnd(4)} ${result.label}：${redactDiagnosticText(result.detail, {
-        homeDirectory: homedir(),
-        maxChars: 2_000,
-      })}`,
-    );
+    console.log(`${marker.padEnd(4)} ${result.label}：${result.detail}`);
   }
 }
 
 function parseDoctorOptions(args: string[]): DoctorOptions {
-  const options: DoctorOptions = { fix: false };
+  const options: DoctorOptions = { fix: false, json: false };
   for (let index = 0; index < args.length; index += 1) {
     const value = args[index];
     if (value === "--fix") {
       options.fix = true;
+      continue;
+    }
+    if (value === "--json") {
+      options.json = true;
       continue;
     }
     if (value === "--diagnostics") {

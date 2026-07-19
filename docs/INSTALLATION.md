@@ -2,6 +2,8 @@
 
 这份文档面向第一次部署的个人和团队维护者。目标是在不开放公网端口的前提下，让本地 Codex 在飞书中可用。
 
+想让本机 Codex 代为完成环境检查、运行向导和状态验收时，直接使用 [让 Codex 帮你安装](INSTALL_WITH_CODEX.md)。它仍会在官方登录、App Secret、权限差异和应用发布处暂停，不会让用户把秘密发进聊天。
+
 ## 前置条件
 
 - macOS 或带 systemd user service 的 Linux。
@@ -155,7 +157,10 @@ feishu-codex-bridge init-runbooks --project /absolute/path/to/project
 ## 诊断和服务管理
 
 ```bash
+feishu-codex-bridge install-status
+feishu-codex-bridge install-status --json
 feishu-codex-bridge doctor
+feishu-codex-bridge doctor --json
 feishu-codex-bridge doctor --fix
 feishu-codex-bridge doctor --diagnostics /private/path/diagnostic.json
 feishu-codex-bridge support-bundle
@@ -164,6 +169,8 @@ feishu-codex-bridge status
 feishu-codex-bridge backup
 feishu-codex-bridge uninstall
 ```
+
+`install-status --json` 是安装助手和支持人员使用的稳定机器契约：它只公开非敏感安装阶段、服务/健康摘要和下一步代码，不输出 App Secret 或已记录错误正文。`ready: true` 表示本地服务、配置一致性和两个事件消费者健康；飞书端到端仍以用户发送“状态”并收到回复为最终证据。`doctor --json` 使用相同的脱敏规则，并以 `ok`、`summary` 和 `checks` 返回自检事实。
 
 `doctor --fix` 只修复运行目录/文件权限、失效健康标记和超限日志，不会修改成员、项目 ACL、sandbox 或用户代码。诊断包包含有界健康、数据库和日志摘要并统一脱敏，分享前仍应人工检查。
 
