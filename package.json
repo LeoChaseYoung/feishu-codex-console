@@ -7,7 +7,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LeoChaseYoung/feishu-codex-bridge.git"
+    "url": "git+https://github.com/LeoChaseYoung/feishu-codex-console.git"
   },
   "keywords": [
     "codex",
@@ -17,9 +17,9 @@
     "remote-development",
     "team"
   ],
-  "homepage": "https://github.com/LeoChaseYoung/feishu-codex-bridge#readme",
+  "homepage": "https://github.com/LeoChaseYoung/feishu-codex-console#readme",
   "bugs": {
-    "url": "https://github.com/LeoChaseYoung/feishu-codex-bridge/issues"
+    "url": "https://github.com/LeoChaseYoung/feishu-codex-console/issues"
   },
   "engines": {
     "node": ">=22"
