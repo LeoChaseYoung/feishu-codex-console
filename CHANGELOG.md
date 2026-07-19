@@ -4,6 +4,8 @@ All notable changes are recorded here. Versions follow Semantic Versioning while
 
 ## Unreleased
 
+## 1.0.0-beta.12 - 2026-07-19
+
 ### Added
 
 - Feishu ↔ Codex desktop handoff for the exact same native thread on macOS, with a truthful `codex resume` fallback when desktop navigation is unsupported or fails.
