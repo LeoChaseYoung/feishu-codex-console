@@ -63,7 +63,7 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@larksuite/cli": "1.0.70",
+    "@larksuite/cli": "1.0.72",
     "@larksuiteoapi/node-sdk": "1.71.1",
     "@openai/codex": "0.144.4",
     "dotenv": "17.2.3"
