@@ -65,7 +65,7 @@
   "dependencies": {
     "@larksuite/cli": "1.0.70",
     "@larksuiteoapi/node-sdk": "1.71.1",
-    "@openai/codex": "0.144.4",
+    "@openai/codex": "0.144.6",
     "dotenv": "17.2.3"
   },
   "devDependencies": {
