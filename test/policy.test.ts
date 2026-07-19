@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canReceiveUnboundGroupGuidance,
   classifyCommand,
   commandPolicyDecision,
   externalActionsForPrompt,
+  hasConfiguredBotMention,
   isAuthorized,
   isAttachmentMessageType,
   isTextualMessageType,
@@ -84,13 +86,39 @@ describe("policy", () => {
     expect(normalizePrompt("@Codex Bot 修复测试", "group", ["Codex Bot"])).toBe(
       "修复测试",
     );
+    expect(hasConfiguredBotMention("@Codex Bot 修复测试", ["Codex Bot"])).toBe(true);
+    expect(hasConfiguredBotMention("@Codex Bot 状态", [])).toBe(true);
+    expect(hasConfiguredBotMention("<at user_id=bot>状态", [])).toBe(true);
+    expect(hasConfiguredBotMention("普通群消息", ["Codex Bot"])).toBe(false);
+    expect(
+      hasConfiguredBotMention("```plain_text\n@Codex Bot 状态\n```", ["Codex Bot"]),
+    ).toBe(true);
+  });
+
+  it("unwraps Feishu PLAIN_TEXT blocks before classifying commands", () => {
+    const direct = normalizePrompt("```PLAIN_TEXT\n新手引导\n```", "p2p", []);
+    const group = normalizePrompt(
+      "```plain_text\n@Codex Bot 状态\n```",
+      "group",
+      ["Codex Bot"],
+    );
+
+    expect(direct).toBe("新手引导");
+    expect(classifyCommand(direct)).toBe("onboarding");
+    expect(group).toBe("状态");
+    expect(classifyCommand(group)).toBe("home");
+    expect(normalizePrompt("```ts\n新手引导\n```", "p2p", [])).toBe(
+      "```ts\n新手引导\n```",
+    );
   });
 
   it("recognizes commands without stealing normal prompts", () => {
     expect(classifyCommand("新手引导")).toBe("onboarding");
     expect(classifyCommand("/start")).toBe("onboarding");
     expect(classifyCommand("/onboarding")).toBe("onboarding");
-    expect(classifyCommand("状态")).toBe("status");
+    expect(classifyCommand("状态")).toBe("home");
+    expect(classifyCommand("首页")).toBe("home");
+    expect(classifyCommand("/home")).toBe("home");
     expect(classifyCommand("控制台")).toBe("status");
     expect(classifyCommand("额度")).toBe("quota");
     expect(classifyCommand("/usage")).toBe("quota");
@@ -207,5 +235,36 @@ describe("policy", () => {
     };
     expect(isAuthorized({ ...base, chat_type: "p2p" }, config)).toBe(true);
     expect(isAuthorized({ ...base, chat_type: "group" }, config)).toBe(false);
+  });
+
+  it("allows only known members to receive a safe hint in an unbound group", () => {
+    const config = {
+      allowedSenderIds: new Set(["ou_operator"]),
+      adminSenderIds: new Set(["ou_admin"]),
+      viewerSenderIds: new Set(["ou_viewer"]),
+      allowedChatIds: new Set<string>(),
+      sandboxMode: "danger-full-access",
+    } as BridgeConfig;
+    const event = {
+      type: "im.message.receive_v1" as const,
+      event_id: "evt_guide",
+      message_id: "om_guide",
+      chat_id: "oc_unbound",
+      chat_type: "group" as const,
+      sender_id: "ou_operator",
+      message_type: "text",
+      content: "hello",
+    };
+    expect(canReceiveUnboundGroupGuidance(event, config, false)).toBe(true);
+    expect(
+      canReceiveUnboundGroupGuidance({ ...event, sender_id: "ou_viewer" }, config, false),
+    ).toBe(true);
+    expect(
+      canReceiveUnboundGroupGuidance({ ...event, sender_id: "ou_unknown" }, config, false),
+    ).toBe(false);
+    expect(canReceiveUnboundGroupGuidance(event, config, true)).toBe(false);
+    expect(
+      canReceiveUnboundGroupGuidance({ ...event, chat_type: "p2p" }, config, false),
+    ).toBe(false);
   });
 });

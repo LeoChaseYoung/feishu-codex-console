@@ -47,17 +47,17 @@ describe("onboarding card", () => {
 
     expect(actions).toEqual(
       expect.arrayContaining([
-        "onboarding_finish",
+        "onboarding_first_task",
         "onboarding_projects",
-        "onboarding_settings",
+        "onboarding_dismiss",
       ]),
     );
     expect(actions).not.toContain("onboarding_start");
     expect(actions).not.toContain("onboarding_next");
     expect(actions).not.toContain("onboarding_back");
-    expect(serialized).toContain("直接在聊天框里说你想做什么");
-    expect(serialized).toContain("运行测试，修复失败用例");
-    expect(serialized).toContain("一个项目建一个群");
+    expect(serialized).toContain("先完成一次真实任务");
+    expect(serialized).toContain("了解当前项目");
+    expect(serialized).toContain("不会修改文件");
     expect(serialized).not.toContain("onboard_progress");
     expect(columns.every((row) => row.length <= 2)).toBe(true);
   });
@@ -110,7 +110,7 @@ describe("onboarding card", () => {
     );
     const serialized = JSON.stringify(card);
 
-    expect(serialized).toContain("团队群可以以后再开");
+    expect(serialized).not.toContain("团队群可以以后再开");
     expect(serialized).not.toContain("discover");
     expect(serialized).not.toContain("chat_id");
     expect(serialized).not.toContain("ALLOWED_FEISHU_CHAT_IDS");
@@ -128,11 +128,11 @@ describe("onboarding card", () => {
     const serialized = JSON.stringify(card);
 
     expect(collectByKey(card, "action")).toEqual(
-      expect.arrayContaining(["onboarding_device", "onboarding_restart"]),
+      expect.arrayContaining(["onboarding_home", "onboarding_restart"]),
     );
     expect(serialized).not.toContain("<at id='all'>");
     expect(serialized).toContain("＜at id='all'＞");
-    expect(serialized).toContain("可以开始了");
+    expect(serialized).toContain("第一次任务已完成");
     expect(serialized).toContain("一个项目建一个群");
   });
 });

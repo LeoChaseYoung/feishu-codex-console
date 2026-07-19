@@ -21,9 +21,12 @@ async function fixture(): Promise<{ config: BridgeConfig; root: string }> {
   temporaryDirectories.push(root);
   const dataDir = path.join(root, "data");
   const workdir = path.join(root, "project");
+  const configFile = path.join(root, ".env");
   await mkdir(path.join(dataDir, "log"), { recursive: true, mode: 0o755 });
   await mkdir(workdir, { recursive: true });
+  await writeFile(configFile, "ALLOWED_FEISHU_OPEN_IDS=ou_operator\n", { mode: 0o644 });
   const config: BridgeConfig = {
+    configFile,
     projectDir: root,
     workdir,
     projectRoots: [workdir],
@@ -110,6 +113,7 @@ describe("doctor diagnostics", () => {
     expect((await stat(config.dataDir)).mode & 0o777).toBe(0o700);
     expect((await stat(path.join(config.dataDir, "log"))).mode & 0o777).toBe(0o700);
     expect((await stat(config.databaseFile)).mode & 0o777).toBe(0o600);
+    expect((await stat(config.configFile!)).mode & 0o777).toBe(0o600);
     await expect(stat(path.join(config.dataDir, "bridge-health.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });

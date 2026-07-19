@@ -26,6 +26,7 @@ export async function repairRuntime(config: BridgeConfig): Promise<RuntimeRepair
   await ensurePrivateDirectory(path.join(config.dataDir, "log"), changed, "日志目录");
 
   for (const file of [
+    ...(config.configFile ? [config.configFile] : []),
     config.databaseFile,
     `${config.databaseFile}-wal`,
     `${config.databaseFile}-shm`,

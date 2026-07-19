@@ -77,7 +77,7 @@ The projects were used as product references, not as visual templates. V5 uses n
 
 ## Reasoning-label alignment update
 
-- Source visual truth: a private Feishu desktop dark-mode capture retained outside the public repository.
+- Source visual truth: a user-provided Feishu desktop screenshot of the Codex reasoning selector.
 - Viewport and state: Feishu desktop dark mode, reasoning selector with `ultra` selected.
 - Copy: visible values now match Codex: `最低 / 轻度 / 中 / 高 / 极高 / 最高`; protocol enums stay in hidden option values.
 - Typography, spacing, colors, and assets: unchanged because the implementation continues to use native CardKit controls.

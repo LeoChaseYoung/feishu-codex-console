@@ -20,13 +20,14 @@ In Feishu, send:
 新手引导
 ```
 
-The adaptive welcome card shows only the next useful action: inspect the connection when the device is offline, select an authorized project when none is ready, or start immediately with realistic examples. Team use stays a short optional tip—one project per group, new work as a new message, and follow-ups in replies—while deployment settings stay out of the member experience.
+The onboarding card starts one real, forced-read-only project overview. It completes automatically only after that task succeeds. An ordinary first request is never interrupted by a separate welcome card; onboarding state is recorded silently in the background.
 
 ## Core commands
 
 | Feishu message | Purpose |
 |---|---|
-| `控制台` / `状态` | Device, Codex, compact account-quota summary, queue, power, permission, and current project |
+| `状态` / `首页` / `/home` | Lightweight home for the current device, project, session, permission, and next action |
+| `控制台` / `设备` / `/device` | Detailed device, Codex, queue, power, remote-readiness, and connection diagnostics |
 | `额度` / `/usage` / `/quota` | Full native account quota windows, reset times, plan, and available resets |
 | `项目` / `/projects` | Search, select, favorite, and inspect authorized projects |
 | `读取项目` / `/overview` | Build a local Git/package/file snapshot without starting Codex or spending AI tokens |
@@ -45,6 +46,9 @@ Ordinary messages are routed locally as answers, read-only analysis, file/conten
 
 ## Team and safety model
 
+- An administrator can add the bot to an existing group and choose its project once inside Feishu. The binding is then permanent: neither cards nor text commands can switch that group to another project. Before binding, no Codex task is accepted.
+- A direct-message project card can create the project group, invite authorized members, persist the binding, and pin its workspace card without copying a `chat_id` or editing configuration.
+- Member sync, workspace delivery, and pinning are persisted as separate recoverable steps. A retry resumes only incomplete work and never creates a second group after the binding exists.
 - Group-level controls are isolated per member by default. Inside a Feishu reply thread, all messages resolve to the same workspace session and Codex thread; execution control still requires explicit ownership or handoff.
 - Administrators, operators, and viewers have separate capabilities; project ACLs hide unauthorized workspaces.
 - Tasks keep an immutable initiator and explicit current controller for audited handoff, reclaim, and admin takeover.
@@ -66,6 +70,10 @@ An upgrade is a read-only preview until `--yes` is added. It blocks live-task re
 
 ## Documentation
 
+- [Full product SOP index](docs/SOP_INDEX.md)
+- [Positive user SOP](docs/USER_SOP.md)
+- [Negative and recovery SOP](docs/FAILURE_RECOVERY_SOP.md)
+- [Acceptance test matrix](docs/ACCEPTANCE_TEST_MATRIX.md)
 - [Installation](docs/INSTALLATION.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Compatibility and upgrades](docs/COMPATIBILITY.md)

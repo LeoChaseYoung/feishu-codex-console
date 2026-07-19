@@ -14,6 +14,7 @@ Exit criteria: a new operator installs from npm, completes the demo, upgrades an
 
 ## Next — 1.1 operations
 
+- Feishu ↔ Codex desktop handoff: open the same native thread, explicitly bind an existing local thread, and show the latest activity source without mirroring Feishu-only controls into Codex history.
 - More actionable doctor checks and a guided support-bundle review.
 - Task search/filtering and clearer long-running task checkpoints.
 - Runbook authoring validation command and richer parameter controls.
@@ -28,6 +29,14 @@ Exit criteria: a new operator installs from npm, completes the demo, upgrades an
 - A migration path from today’s one-instance/one-device deployments.
 
 Multi-device work starts only after a published threat model and an offline/reconnect protocol are reviewed.
+
+## Later — P2 multi-agent orchestration
+
+Multi-agent execution is intentionally outside the current product mainline. Keep the underlying Codex feature flag available but disabled by default while the single-agent remote workspace is stabilized.
+
+Work starts only after project-group end-to-end reliability, task-intent inheritance, Feishu ↔ Codex desktop handoff, approval routing, and trustworthy usage accounting are complete. The eventual product experience should let users choose automatic, single-agent, or collaborative execution while still managing one task, one approval surface, and one consolidated result.
+
+Before multi-agent execution can be enabled by default, child-agent threads must inherit the root task's project, sandbox, ACL, external-action policy, stop/recovery lifecycle, and token budget. Initial limits should keep one writing agent per workspace, other agents read-only, recursion depth at one, and child-agent concurrency bounded.
 
 ## Deliberately not planned for 1.x core
 

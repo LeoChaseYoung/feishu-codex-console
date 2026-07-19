@@ -25,7 +25,13 @@ describe("Feishu installation capability probe", () => {
         args: eventProbeArgs("card.action.trigger"),
         cwd: "/tmp/project",
       },
+      {
+        command: "lark-cli",
+        args: ["auth", "scopes", "--format", "json"],
+        cwd: "/tmp/project",
+      },
     ]);
+    expect(report.projectChatStatus).toBe("unknown");
   });
 
   it("accepts an event stream already owned by the running bridge", () => {
@@ -65,5 +71,55 @@ describe("Feishu installation capability probe", () => {
       detail: "missing required scope",
     });
     expect(report.checks[1].remediation).toMatch(/im.message.receive_v1/);
+  });
+
+  it("verifies all optional project-chat scopes when app scopes are available", () => {
+    const report = probeFeishuCapabilities("lark-cli", {
+      run(_command, args) {
+        if (args[0] === "auth") {
+          return {
+            status: 0,
+            stdout: JSON.stringify({
+              tenantScopes: [
+                "im:chat:create",
+                "im:chat.members:write_only",
+                "im:message.pins:write_only",
+                "im:message.group_msg:readonly",
+              ],
+            }),
+            stderr: "",
+          };
+        }
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+    expect(report.ok).toBe(true);
+    expect(report.projectChatStatus).toBe("ready");
+    expect(report.checks.slice(-4).every((check) => check.ok)).toBe(true);
+  });
+
+  it("reports missing project-chat scopes without blocking private-chat setup", () => {
+    const report = probeFeishuCapabilities("lark-cli", {
+      run(_command, args) {
+        if (args[0] === "auth") {
+          return {
+            status: 0,
+            stdout: JSON.stringify({ tenantScopes: ["im:chat:create"] }),
+            stderr: "",
+          };
+        }
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+    expect(report.ok).toBe(true);
+    expect(report.projectChatStatus).toBe("missing");
+    expect(report.checks.find((check) => check.id === "project_chat_members_scope")).toMatchObject({
+      ok: false,
+      status: "missing",
+    });
+    expect(report.checks.find((check) => check.id === "project_chat_message_scope")).toMatchObject({
+      ok: false,
+      status: "missing",
+    });
   });
 });

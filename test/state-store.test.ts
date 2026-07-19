@@ -498,6 +498,114 @@ describe("StateStore", () => {
     state.close();
   });
 
+  it("persists one automatically managed Feishu chat per project", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "feishu-codex-project-chat-"));
+    const databaseFile = path.join(directory, "state.sqlite");
+    const state = new StateStore(databaseFile, 10);
+    await state.load();
+    await state.upsertProjectChat({
+      chatId: "oc-project-a",
+      projectPath: "/repos/a",
+      ownerId: "ou-owner",
+      name: "project-a · Codex",
+    });
+    expect(state.getProjectChat("oc-project-a")).toMatchObject({
+      projectPath: "/repos/a",
+      ownerId: "ou-owner",
+      origin: "existing",
+      membersStatus: "unknown",
+      membersFingerprint: null,
+      workspaceStatus: "unknown",
+      pinStatus: "unknown",
+      messageStatus: "unknown",
+    });
+    state.close();
+
+    const restored = new StateStore(databaseFile, 10);
+    await restored.load();
+    expect(restored.getProjectChatByProject("/repos/a")).toMatchObject({
+      chatId: "oc-project-a",
+      name: "project-a · Codex",
+    });
+    await expect(
+      restored.upsertProjectChat({
+        chatId: "oc-project-a-recreated",
+        projectPath: "/repos/a",
+        ownerId: "ou-owner",
+        name: "project-a · Codex",
+      }),
+    ).rejects.toThrow("已经绑定了其他项目群");
+    await expect(
+      restored.upsertProjectChat({
+        chatId: "oc-project-a",
+        projectPath: "/repos/b",
+        ownerId: "ou-owner",
+        name: "project-b · Codex",
+      }),
+    ).rejects.toThrow("这个群已经绑定项目");
+    expect(restored.listProjectChats()).toHaveLength(1);
+    expect(restored.getProjectChat("oc-project-a")).toBeDefined();
+    expect(restored.getProjectChatByProject("/repos/a")?.chatId).toBe(
+      "oc-project-a",
+    );
+    restored.close();
+  });
+
+  it("migrates legacy project chat bindings to recoverable setup state", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "feishu-codex-project-chat-v2-"));
+    const databaseFile = path.join(directory, "state.sqlite");
+    const legacy = new DatabaseSync(databaseFile);
+    legacy.exec(`
+      CREATE TABLE project_chats (
+        chat_id TEXT PRIMARY KEY,
+        project_path TEXT NOT NULL UNIQUE,
+        owner_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO project_chats VALUES (
+        'oc-legacy', '/repos/legacy', 'ou-owner', 'legacy · Codex',
+        '2026-07-17T00:00:00.000Z', '2026-07-17T00:00:00.000Z'
+      );
+      PRAGMA user_version = 2;
+    `);
+    legacy.close();
+
+    const state = new StateStore(databaseFile, 10);
+    await state.load();
+    expect(state.getProjectChat("oc-legacy")).toMatchObject({
+      projectPath: "/repos/legacy",
+      origin: "existing",
+      membersStatus: "unknown",
+      membersFingerprint: null,
+      workspaceStatus: "unknown",
+      pinStatus: "unknown",
+      messageStatus: "unknown",
+      workspaceMessageId: null,
+      lastError: null,
+    });
+    await state.updateProjectChatSetup("oc-legacy", {
+      workspaceStatus: "succeeded",
+      workspaceCardId: "cc-legacy",
+      workspaceMessageId: "om-legacy",
+      pinStatus: "failed",
+      messageStatus: "succeeded",
+      membersFingerprint: "team-v1",
+      lastErrorStep: "pin",
+      lastError: "missing pin scope",
+    });
+    expect(state.getProjectChat("oc-legacy")).toMatchObject({
+      workspaceStatus: "succeeded",
+      workspaceMessageId: "om-legacy",
+      pinStatus: "failed",
+      messageStatus: "succeeded",
+      membersFingerprint: "team-v1",
+      lastErrorStep: "pin",
+    });
+    state.close();
+  });
+
   it("can be loaded again after a transient filesystem failure", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "feishu-codex-state-recovery-"));
     const blockedParent = path.join(directory, "blocked");

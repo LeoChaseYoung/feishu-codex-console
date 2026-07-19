@@ -11,7 +11,7 @@ This page is the release contract for operators and package maintainers. The npm
 | Feishu runtime | @larksuite/cli `1.0.70` |
 | Configuration | `BRIDGE_CONFIG_VERSION=1` |
 | Persisted bridge state | persisted state v6, migrated on load |
-| SQLite | SQLite schema v1, backed up before migration |
+| SQLite | SQLite schema v3, backed up before migration; immutable project-chat binding plus recoverable member/workspace/pin steps |
 | Background service | macOS LaunchAgent or Linux systemd user service |
 
 Run `feishu-codex-bridge version` or `feishu-codex-bridge version --json` to print the exact contract installed on a machine.

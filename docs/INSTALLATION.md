@@ -9,12 +9,29 @@
 - 本机安装 Codex，并已运行 `codex login`。
 - 一个飞书自建应用，已启用机器人、长连接事件和 CardKit 权限。
 
+部署者不需要手工搜索下面的权限。绑定 Bot 应用后，初始化向导会主动询问是否一键配置；也可以随时运行：
+
+```bash
+feishu-codex-bridge configure-feishu
+```
+
+该命令使用飞书官方确认页，只申请本产品需要的最小权限并展示差异，不等于“开启全部飞书权限”。以下清单用于安全审查和故障排查。
+
 飞书应用至少需要：
 
 - `im:message:readonly`
 - `cardkit:card:write`
 - `im.message.receive_v1`
 - `card.action.trigger`
+
+项目群自动化另外需要：
+
+- `im:chat:create`
+- `im:chat.members:write_only`
+- `im:message.pins:write_only`
+- `im:message.group_msg` 或 `im:message.group_msg:readonly`
+
+安装器和 `doctor` 会区分“核心能力”和“项目群增强能力”。核心能力失败会阻断安装；项目群 scope 缺失或当前身份无法读取时，向导提供一键配置，用户拒绝后仍可只使用私聊和群内 `@机器人`。首次创建项目群会分别记录成员、工作台、置顶和普通消息实测结果；只有收到一条未 @ 机器人的普通消息后才显示完全就绪。
 
 ## 推荐安装
 
@@ -51,6 +68,18 @@ npx lark-cli whoami --as bot
 
 已有应用时去掉 `--new`。App Secret 由 `lark-cli` 保存在用户配置目录，不应写进桥接服务的 `.env`。
 
+绑定后推荐立即执行：
+
+```bash
+feishu-codex-bridge configure-feishu
+```
+
+浏览器会显示将要新增的权限、事件和回调。确认前不会修改应用；确认后若开放平台要求发布新版本，请完成发布。只需要修复“群内必须 @ 才有回复”时运行：
+
+```bash
+feishu-codex-bridge configure-feishu --profile ordinary-group
+```
+
 ## 自动识别 open_id
 
 初始化向导会提示你给机器人发送一条消息，并从只读事件流中自动提取 `sender_id`、`chat_id` 和会话类型。也可以单独运行：
@@ -72,14 +101,14 @@ feishu-codex-bridge discover
 ### 团队安全
 
 - 显式区分管理员、操作者和只读成员。
-- 群聊按成员隔离项目、会话、设置和队列。
+- 群聊首次由管理员选择一次项目，之后群与项目永久绑定；会话、设置和队列仍按成员或话题隔离。
 - 最大权限为工作区写入。
 
 ### 高级模式
 
 - 服务上限为完全访问。
 - 普通操作者仍限制为工作区写入。
-- 群聊未加入白名单时会被拒绝。
+- 未绑定群只允许管理员完成首次项目选择，绑定前不会执行任务；成功后自动持久化为可信项目群。
 - 初始化时必须再次确认风险。
 
 非交互式安装高级模式必须显式传入 `--allow-full-access`。
@@ -205,3 +234,10 @@ npx feishu-codex-console@next migrate --from /absolute/path/to/old/feishu-codex-
 标签必须与 `package.json` 完全一致，例如 `1.0.0-beta.4` 对应 `v1.0.0-beta.4`。
 
 Ubuntu 与 macOS 的自动门禁、两端实机验证和飞书团队权限验收见 [发布检查清单](RELEASE_CHECKLIST.md)。安装异常见 [故障排查](TROUBLESHOOTING.md)，所有环境变量见 [配置参考](CONFIGURATION.md)。
+
+面向使用者和测试人员的完整流程：
+
+- [全项目 SOP 总览](SOP_INDEX.md)
+- [全项目正向 SOP](USER_SOP.md)
+- [全项目逆向与故障恢复 SOP](FAILURE_RECOVERY_SOP.md)
+- [验收测试矩阵](ACCEPTANCE_TEST_MATRIX.md)

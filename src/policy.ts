@@ -5,6 +5,7 @@ import { roleForSender } from "./team-policy.js";
 export type BotCommand =
   | "help"
   | "onboarding"
+  | "home"
   | "status"
   | "quota"
   | "new"
@@ -112,6 +113,21 @@ export function isAuthorized(event: FeishuMessageEvent, config: BridgeConfig): b
     return false;
   }
   return config.allowedChatIds.size === 0 || config.allowedChatIds.has(event.chat_id);
+}
+
+/** Allows a known team member to receive a zero-execution binding hint in an
+ * unbound group. This does not authorize the chat, mutate the allowlist, or
+ * permit a task to enter the queue. */
+export function canReceiveUnboundGroupGuidance(
+  event: FeishuMessageEvent,
+  config: BridgeConfig,
+  hasProjectBinding: boolean,
+): boolean {
+  return (
+    event.chat_type === "group" &&
+    !hasProjectBinding &&
+    Boolean(roleForSender(config, event.sender_id))
+  );
 }
 
 export function isTextualMessageType(messageType: string): boolean {
@@ -437,7 +453,7 @@ export function normalizePrompt(
   chatType: FeishuMessageEvent["chat_type"],
   botMentionNames: string[],
 ): string {
-  let prompt = content.trim();
+  let prompt = unwrapPlainTextFence(content.trim());
   if (chatType === "group") {
     for (const name of botMentionNames) {
       const prefix = `@${name}`;
@@ -448,6 +464,32 @@ export function normalizePrompt(
     }
   }
   return prompt.trim();
+}
+
+export function hasConfiguredBotMention(
+  content: string,
+  botMentionNames: readonly string[],
+): boolean {
+  const prompt = unwrapPlainTextFence(content.trim()).trimStart().toLocaleLowerCase();
+  if (
+    botMentionNames.some((name) =>
+      prompt.startsWith(`@${name.trim()}`.toLocaleLowerCase()),
+    )
+  ) {
+    return true;
+  }
+
+  // Fail closed when a deployment has not configured every display-name alias.
+  // A leading mention is not evidence that the app can receive ordinary group
+  // messages, so it must never complete the project-chat delivery check.
+  return /^(?:@\S+|<at\b)/i.test(prompt);
+}
+
+function unwrapPlainTextFence(content: string): string {
+  const match = content.match(
+    /^```(?:plain[_-]?text|plaintext|text)\s*\n?([\s\S]*?)\n?```$/i,
+  );
+  return match?.[1]?.trim() ?? content;
 }
 
 export function classifyCommand(prompt: string): BotCommand {
@@ -468,10 +510,20 @@ export function classifyCommand(prompt: string): BotCommand {
   if (
     [
       "状态",
-      "控制台",
-      "设备",
+      "首页",
+      "主页",
+      "home",
+      "/home",
       "status",
       "/status",
+    ].includes(normalized)
+  ) {
+    return "home";
+  }
+  if (
+    [
+      "控制台",
+      "设备",
       "device",
       "/device",
     ].includes(normalized)
@@ -583,8 +635,9 @@ export const HELP_TEXT = [
   "飞书 Codex V5 已就绪。直接发送开发任务、截图或文本/代码文件即可。",
   "",
   "可用命令：",
-  "- 新手引导 / /start：打开一分钟交互式上手流程",
-  "- 状态 / 控制台：查看本地设备、当前项目与远程就绪开关",
+  "- 新手引导 / /start：用一次只读真实任务完成上手",
+  "- 状态 / 首页：打开当前项目、会话和任务入口",
+  "- 控制台 / 设备：查看本机连接、远程就绪和详细运行状态",
   "- 额度 / /usage：查看 Codex 各独立额度窗口与重置时间",
   "- 项目 / /projects：打开项目工作台",
   "- 读取项目 / /overview：生成零 AI token 的本地项目快照",

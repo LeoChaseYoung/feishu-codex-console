@@ -32,6 +32,7 @@ describe("installation success card", () => {
         instanceId: "default",
         projectName: "bridge",
         sandboxLabel: "工作区写入",
+        groupChatStatus: "ready",
         LarkCliClass: FakeLarkCli,
         renderOnboardingCard,
       }),
@@ -41,8 +42,11 @@ describe("installation success card", () => {
       role: "admin",
       state: { ownerId: "ou-owner", status: "active", step: 1 },
       projectName: "bridge",
+      projectAvailable: true,
       sandboxLabel: "工作区写入",
+      canWrite: true,
       deviceOnline: true,
+      groupChatEnabled: true,
     });
     expect(calls[1][1].feedback).toMatch(/端到端验证/);
     expect(calls.at(-1)).toEqual([

@@ -11,6 +11,8 @@ import {
   repairRuntime,
   type DoctorCheckResult,
 } from "./diagnostics.js";
+import { assessProjectChatScopes } from "./doctor-capabilities.js";
+import { readProjectChatRuntimeEvidence } from "./doctor-runtime-evidence.js";
 import { ProjectRegistry } from "./project-registry.js";
 import {
   installConsoleRedaction,
@@ -40,7 +42,8 @@ async function main(): Promise<void> {
       results.push({
         label: "群聊门禁",
         status: "warning",
-        detail: "完全访问模式未配置聊天白名单；私聊可用，群聊将自动拒绝",
+        detail:
+          "完全访问模式未配置静态聊天白名单；私聊可用，已持久化项目群会恢复可信状态，其他群只允许管理员完成首次绑定",
       });
     } else {
       results.push({
@@ -100,6 +103,17 @@ async function main(): Promise<void> {
     label: "飞书 Bot",
     status: lark.code === 0 ? "ok" : "failed",
     detail: lark.code === 0 ? "应用身份可用" : "lark-cli Bot 身份不可用",
+  });
+  const scopeProbe = await run(config.larkCliPath, ["auth", "scopes", "--format", "json"]);
+  const projectChatScopes = assessProjectChatScopes(
+    scopeProbe.code,
+    scopeProbe.stdout,
+    readProjectChatRuntimeEvidence(config.databaseFile),
+  );
+  results.push({
+    label: "项目群能力",
+    status: projectChatScopes.status === "ready" ? "ok" : "warning",
+    detail: projectChatScopes.detail,
   });
 
   const localCodex =

@@ -44,9 +44,36 @@ npx lark-cli whoami --as bot
 - `im.message.receive_v1`
 - `card.action.trigger`
 
-同时确认应用具有 `im:message:readonly` 和 `cardkit:card:write`。修改权限或事件后，按飞书后台要求发布新应用版本，再重新运行 `init`。
+优先运行 `feishu-codex-bridge configure-feishu --profile core`，通过飞书官方确认页补齐核心权限与事件；不需要手工搜索 scope。确认后若开放平台提示待发布版本，完成发布并重新运行 `init`。
 
 如果检查显示“已有运行中的事件消费者”，说明当前服务已经占用该应用的长连接，这本身不是权限错误。重新安装服务时，安装器会停止旧实例并等待新实例接管。
+
+## 项目群只完成了一部分
+
+项目群创建不是一个不可观察的黑盒。Bridge 会分别显示和保存：
+
+- 成员邀请
+- 工作台发送
+- 工作台置顶
+- 普通群消息实测
+
+卡片显示“项目群已绑定，但部分配置尚未完成”时，不要删除群，也不要重新选择项目。在安装机运行 `feishu-codex-bridge configure-feishu --profile project-chat`，核对官方页面展示的权限差异并确认；若有待发布版本则完成发布，然后再次点击“打开项目群”。重试只补失败步骤：已有绑定不会再次建群，已有工作台消息不会重复发送。
+
+对应权限：
+
+- 自动建群：`im:chat:create`
+- 邀请成员：`im:chat.members:write_only`
+- 置顶：`im:message.pins:write_only`
+- 普通群消息：`im:message.group_msg` 或 `im:message.group_msg:readonly`
+- 工作台：`cardkit:card:write` 和机器人发消息能力
+
+`doctor` 显示“当前 lark-cli 身份未返回应用级权限”不是通过，也不是确定缺失。发送一条未 @ 机器人的普通群消息并收到回复，才算运行态验证通过；否则请先 @ 机器人降级使用。完整恢复边界见 [逆向与故障恢复 SOP](FAILURE_RECOVERY_SOP.md)。
+
+若只有普通群消息失败，使用最小修复：
+
+```bash
+feishu-codex-bridge configure-feishu --profile ordinary-group
+```
 
 ## 服务启动但安装一直等待
 
@@ -125,6 +152,6 @@ npx feishu-codex-console@next migrate --from /absolute/path/to/old/source
 
 - 管理员、操作者、只读成员是否明确分开。
 - `CODEX_OPERATOR_SANDBOX_MODE` 是否仍为 `workspace-write`。
-- 群聊是否加入 `ALLOWED_FEISHU_CHAT_IDS`。
+- 群聊是否已经由管理员完成首次项目绑定；绑定完成前不会执行 Codex 任务。
 - 项目根目录和 ACL 是否只覆盖必要仓库。
 - 网络、Web 搜索和额外环境变量是否保持最小开放。

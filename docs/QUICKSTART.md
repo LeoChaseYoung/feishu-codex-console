@@ -31,31 +31,34 @@ codex --version
 codex login
 ```
 
-## 2. 准备飞书自建应用
+## 2. 创建并绑定飞书自建应用
 
-在飞书开放平台创建一个企业自建应用，然后完成下面四项：
-
-1. 启用“机器人”能力。
-2. 添加权限 `im:message:readonly` 和 `cardkit:card:write`。
-3. 在“事件与回调”中选择长连接，并订阅：
-   - `im.message.receive_v1`
-   - `card.action.trigger`
-4. 创建并发布一个应用版本，让权限和事件订阅真正生效。
-
-如果要在群聊使用，还需要把机器人加入目标群。权限或事件后来有变化时，要再次发布应用版本。
-
-## 3. 在本机绑定飞书应用
-
-运行：
+在飞书开放平台创建一个企业自建应用并启用“机器人”能力，然后在本机绑定：
 
 ```bash
 npx lark-cli config init --new
 npx lark-cli whoami --as bot
 ```
 
-按提示填写飞书应用的 App ID 和 App Secret。Secret 由 `lark-cli` 保存在用户配置目录，不要写入项目 `.env`，也不要提交到 Git。
+App Secret 只交给 `lark-cli` 保存，不要写入项目 `.env` 或提交到 Git。已有 `lark-cli` 应用配置时，第一条命令去掉 `--new`。
 
-已有 `lark-cli` 应用配置时，第一条命令去掉 `--new`。
+## 3. 一键配置本产品权限
+
+不需要逐个查找 scope，运行：
+
+```bash
+npx feishu-codex-console@next configure-feishu
+```
+
+浏览器只会列出本产品需要的最小权限、`im.message.receive_v1` 事件和 `card.action.trigger` 回调；不会开启通讯录、日历、云文档等无关权限。核对差异并确认，如果飞书提示待发布版本，再由应用管理员完成发布。
+
+只修复“群内普通消息必须 @ 机器人才有回复”时运行：
+
+```bash
+npx feishu-codex-console@next configure-feishu --profile ordinary-group
+```
+
+项目群创建后，再发送一条不 `@机器人` 的普通消息完成真实验证；收到回复才算配置完成。如果暂时失败，群内 `@机器人` 和私聊仍然可用。
 
 ## 4. 运行安装向导
 
@@ -79,6 +82,8 @@ npx feishu-codex-console@next status
 npx feishu-codex-console@next doctor
 ```
 
+能力检查分两层：Bot、消息事件和卡片事件失败会阻断安装；自动建群、邀请成员和置顶权限会显示为“已验证 / 缺失 / 当前无法确认”，不会阻断只使用私聊。第一次创建项目群时，Bridge 会按步骤再次验证，并把具体失败项显示在卡片上。
+
 默认配置文件：
 
 ```text
@@ -87,17 +92,15 @@ npx feishu-codex-console@next doctor
 
 ## 5. 在飞书发送第一组消息
 
-按顺序发送：
+第一次使用只需要发送：
 
 ```text
 新手引导
-控制台
-项目
-读取项目
-这个项目是做什么的？
 ```
 
-前三条用于确认设备、Codex 和项目都正确；`读取项目` 只做本地快照，不调用模型。最后一条才会进入真实 Codex 会话。
+确认卡片上的项目后，点击“了解当前项目（只读）”。这会启动第一次真实 Codex 任务，但强制只读，不修改文件，也不运行测试或构建。任务成功后引导会自动完成。
+
+之后发送 `状态` 打开轻量首页；只有排查连接、电源或远程就绪时才发送 `控制台`。首条自然语言任务也可以直接发送，不会被欢迎卡打断。
 
 之后可以直接自然表达，不需要先选任务类型：
 
@@ -119,9 +122,13 @@ npx feishu-codex-console@next doctor
 
 推荐团队约定：**一个项目对应一个群聊。**
 
+- 已有群：管理员把机器人拉进群，在群里发送任意一句或“项目”，然后在卡片中选择一次项目。
+- 自动建群：在机器人私聊的“状态”或“项目”卡中点击“一键创建项目群”。机器人会自动建群、邀请已授权成员、绑定项目并置顶工作区卡。
+- 如果邀请、工作台或置顶只有部分成功，卡片会明确显示待修复步骤；再次点击“打开项目群”只补失败步骤，不会重复建群。
+- 项目一旦绑定就永久锁定在该群，卡片和文字命令都不能切换；另一个项目使用另一个群。
 - 群里新发一条顶层消息：开始一件新事情，创建独立 Codex 会话。
 - 在机器人回复串中继续说：延续同一件事情和同一个 Codex thread。
-- 另一个项目：进入它自己的群，或先发送“项目”切换并确认路径。
+- 另一个项目：进入它自己的群。
 - 同时处理多个项目：分别在对应项目群或不同回复串中发起，任务卡始终显示项目名。
 
 私聊适合个人连续使用；团队协作优先使用项目群和回复串，避免上下文混在一起。
@@ -131,7 +138,8 @@ npx feishu-codex-console@next doctor
 | 发送内容 | 作用 |
 |---|---|
 | `新手引导` | 重新打开使用引导 |
-| `控制台` / `状态` | 查看设备、Codex、项目、队列与远程就绪 |
+| `状态` / `首页` | 打开当前项目、会话、权限和任务入口 |
+| `控制台` / `设备` | 查看设备、Codex、队列与远程就绪详情 |
 | `项目` | 选择或切换项目 |
 | `读取项目` | 生成 0 AI token 的项目快照 |
 | `模型` / `设置` | 切换模型、推理强度和后续任务权限 |
@@ -177,13 +185,9 @@ npx feishu-codex-console@next doctor
 
 ### 群聊被拒绝
 
-完全访问模式下，群聊必须加入 `ALLOWED_FEISHU_CHAT_IDS`。运行：
+确认首条消息由 `FEISHU_ADMIN_OPEN_IDS` 中的管理员发送。未绑定群在完全访问模式下只会开放“首次选择项目”卡，不会执行 Codex 任务；选择完成后群 ID 与项目会安全写入 SQLite，不需要复制 `chat_id`、编辑 `ALLOWED_FEISHU_CHAT_IDS` 或重启服务。
 
-```bash
-npx feishu-codex-console@next discover
-```
-
-在目标群发送一条消息，取得 `chat_id` 后重新运行向导或更新私有配置。
+如果卡片提示缺少权限，请在飞书开放平台补齐本页第 2 步的项目群权限并重新发布应用版本。
 
 ### 需要升级
 
@@ -199,4 +203,4 @@ npx feishu-codex-console@next upgrade --config ~/.config/feishu-codex-bridge/def
 npx feishu-codex-console@next upgrade --config ~/.config/feishu-codex-bridge/default.env --yes
 ```
 
-更多问题见 [安装指南](INSTALLATION.md)、[配置参考](CONFIGURATION.md)和[故障排查](TROUBLESHOOTING.md)。
+安装、日常任务、项目群、团队协作、升级和卸载的总入口见 [全项目 SOP 总览](SOP_INDEX.md)。完整正常流程见 [全项目正向 SOP](USER_SOP.md)，失败与恢复见 [全项目逆向与故障恢复 SOP](FAILURE_RECOVERY_SOP.md)，发布验收见 [验收测试矩阵](ACCEPTANCE_TEST_MATRIX.md)。更多问题见 [安装指南](INSTALLATION.md)、[配置参考](CONFIGURATION.md)和[故障排查](TROUBLESHOOTING.md)。
