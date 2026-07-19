@@ -10,6 +10,7 @@ import {
   renderDeviceCard,
   type DeviceConsoleSnapshot,
 } from "../src/device-card.js";
+import { renderPrivateHomeCard } from "../src/home-card.js";
 import { renderOnboardingCard } from "../src/onboarding-card.js";
 import { createTaskProgress, noteTask, startTask, succeedTask } from "../src/progress.js";
 import { renderProjectCard } from "../src/project-card.js";
@@ -162,6 +163,21 @@ function cardFixtures(): Array<[string, FeishuCard]> {
   };
 
   return [
+    [
+      "private-home",
+      renderPrivateHomeCard({
+        deviceName: "Developer MacBook Pro",
+        availability: device.availability,
+        project: { name: project.name, isGitRepository: true },
+        role: "operator",
+        modelLabel: "gpt-5.4",
+        sandboxLabel: "工作区写入",
+        hasSession: true,
+        queuedTasks: 0,
+        canOperate: true,
+        onboardingStatus: "completed",
+      }),
+    ],
     [
       "onboarding-active",
       renderOnboardingCard({

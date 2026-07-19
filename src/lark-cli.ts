@@ -40,6 +40,17 @@ export interface LarkApiHealth {
   lastError?: string;
 }
 
+export interface CreatedProjectChat {
+  chatId: string;
+  name: string;
+}
+
+export interface AddedChatMembers {
+  requested: number;
+  unavailable: number;
+  pendingApproval: number;
+}
+
 function childEnvironment(): NodeJS.ProcessEnv {
   return {
     ...process.env,
@@ -172,6 +183,150 @@ export class LarkCli {
     if (replyInThread) args.push("--reply-in-thread");
     const response = await this.runJson(args);
     return findString(response, "message_id");
+  }
+
+  async sendCard(
+    chatId: string,
+    cardId: string,
+    idempotencyKey: string,
+  ): Promise<string | null> {
+    const response = await this.runJson([
+      "im",
+      "+messages-send",
+      "--chat-id",
+      chatId,
+      "--msg-type",
+      "interactive",
+      "--content",
+      JSON.stringify({ type: "card", data: { card_id: cardId } }),
+      "--as",
+      "bot",
+      "--idempotency-key",
+      safeIdempotencyKey(idempotencyKey),
+      "--format",
+      "json",
+    ]);
+    return findString(response, "message_id");
+  }
+
+  async createProjectChat(
+    name: string,
+    description: string,
+    ownerId: string,
+    idempotencyKey: string,
+  ): Promise<CreatedProjectChat> {
+    const response = await this.runJson([
+      "im",
+      "chats",
+      "create",
+      "--params",
+      JSON.stringify({
+        user_id_type: "open_id",
+        set_bot_manager: true,
+        uuid: safeIdempotencyKey(idempotencyKey),
+      }),
+      "--data",
+      JSON.stringify({
+        name,
+        description,
+        owner_id: ownerId,
+        user_id_list: [ownerId],
+        chat_mode: "group",
+        chat_type: "private",
+        group_message_type: "thread",
+        edit_permission: "only_owner",
+      }),
+      "--as",
+      "bot",
+      "--format",
+      "json",
+    ]);
+    const chatId = findString(response, "chat_id");
+    if (!chatId) throw new Error("Feishu create-chat response did not include chat_id");
+    return { chatId, name: findString(response, "name") || name };
+  }
+
+  async getChatName(chatId: string): Promise<string | null> {
+    const response = await this.runJson([
+      "im",
+      "chats",
+      "get",
+      "--chat-id",
+      chatId,
+      "--as",
+      "bot",
+      "--format",
+      "json",
+    ]);
+    return findString(response, "name");
+  }
+
+  async sendSharedChat(
+    destinationChatId: string,
+    sharedChatId: string,
+    idempotencyKey: string,
+  ): Promise<string | null> {
+    const response = await this.runJson([
+      "im",
+      "+messages-send",
+      "--chat-id",
+      destinationChatId,
+      "--msg-type",
+      "share_chat",
+      "--content",
+      JSON.stringify({ chat_id: sharedChatId }),
+      "--as",
+      "bot",
+      "--idempotency-key",
+      safeIdempotencyKey(idempotencyKey),
+      "--format",
+      "json",
+    ]);
+    return findString(response, "message_id");
+  }
+
+  async addChatMembers(chatId: string, memberIds: readonly string[]): Promise<AddedChatMembers> {
+    const unique = [...new Set(memberIds.filter(Boolean))];
+    let unavailable = 0;
+    let pendingApproval = 0;
+    for (let offset = 0; offset < unique.length; offset += 50) {
+      const ids = unique.slice(offset, offset + 50);
+      const response = await this.runJson([
+        "im",
+        "chat.members",
+        "create",
+        "--params",
+        JSON.stringify({
+          chat_id: chatId,
+          member_id_type: "open_id",
+          succeed_type: 1,
+        }),
+        "--data",
+        JSON.stringify({ id_list: ids }),
+        "--as",
+        "bot",
+        "--format",
+        "json",
+      ]);
+      unavailable += findArrayLength(response, "invalid_id_list");
+      unavailable += findArrayLength(response, "not_existed_id_list");
+      pendingApproval += findArrayLength(response, "pending_approval_id_list");
+    }
+    return { requested: unique.length, unavailable, pendingApproval };
+  }
+
+  async pinMessage(messageId: string): Promise<void> {
+    await this.run([
+      "im",
+      "pins",
+      "create",
+      "--data",
+      JSON.stringify({ message_id: messageId }),
+      "--as",
+      "bot",
+      "--format",
+      "json",
+    ]);
   }
 
   async streamCardContent(
@@ -648,6 +803,22 @@ function findString(value: unknown, key: string, depth = 0): string | null {
     if (found) return found;
   }
   return null;
+}
+
+function findArrayLength(value: unknown, key: string, depth = 0): number {
+  if (depth > 8 || value === null || typeof value !== "object") return 0;
+  if (!Array.isArray(value) && key in value) {
+    const candidate = (value as Record<string, unknown>)[key];
+    if (Array.isArray(candidate)) return candidate.length;
+  }
+  const nestedValues = Array.isArray(value)
+    ? value
+    : Object.values(value as Record<string, unknown>);
+  for (const nested of nestedValues) {
+    const found = findArrayLength(nested, key, depth + 1);
+    if (found > 0) return found;
+  }
+  return 0;
 }
 
 async function wait(ms: number, signal: AbortSignal): Promise<void> {

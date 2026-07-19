@@ -22,10 +22,13 @@ export async function sendInstallationCard(options) {
       updatedAt: new Date().toISOString(),
     },
     projectName: options.projectName,
+    projectAvailable: Boolean(options.projectName),
     modelLabel: "Codex 默认",
     sandboxLabel: options.sandboxLabel,
+    canWrite: !/只读/.test(options.sandboxLabel ?? ""),
     deviceOnline: true,
-    feedback: "安装成功，飞书、本地服务和 CardKit 已完成端到端验证。",
+    groupChatEnabled: options.groupChatStatus === "ready",
+    feedback: installFeedback(options.groupChatStatus),
   });
   const cardId = await lark.createCard(card);
   await lark.replyCard(
@@ -34,4 +37,13 @@ export async function sendInstallationCard(options) {
     `install_${options.instanceId}_${options.messageId}`,
   );
   return { cardId };
+}
+
+function installFeedback(groupChatStatus) {
+  const suffix = groupChatStatus === "ready"
+    ? "项目群权限也已验证。"
+    : groupChatStatus === "missing"
+      ? "私聊已可用；项目群仍有权限待补，创建时会显示具体修复项。"
+      : "私聊已可用；项目群权限将在首次创建时逐步验证。";
+  return `安装成功，飞书、本地服务和 CardKit 已完成端到端验证。${suffix}`;
 }

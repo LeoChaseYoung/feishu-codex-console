@@ -9,6 +9,7 @@ export type SafeWebSearchMode = "disabled" | "cached" | "live";
 
 export interface BridgeConfig {
   configVersion: 1;
+  configFile?: string;
   projectDir: string;
   workdir: string;
   projectRoots: string[];
@@ -217,9 +218,17 @@ export function loadConfig(
     ["minimal", "low", "medium", "high", "xhigh", "ultra"] as const,
     "CODEX_REASONING_EFFORT",
   );
+  const explicitConfigFile = env.DOTENV_CONFIG_PATH?.trim();
+  const defaultConfigFile = path.join(projectDir, ".env");
+  const configFile = explicitConfigFile
+    ? path.resolve(explicitConfigFile)
+    : existsSync(defaultConfigFile)
+      ? path.resolve(defaultConfigFile)
+      : undefined;
 
   const config: BridgeConfig = {
     configVersion: 1,
+    ...(configFile ? { configFile } : {}),
     projectDir: realpathSync(projectDir),
     dataDir,
     instanceId,

@@ -2,7 +2,7 @@ import "dotenv/config";
 
 import { createHash } from "node:crypto";
 import { arch, hostname, platform, release } from "node:os";
-import { basename, extname, join, resolve } from "node:path";
+import { basename, extname, join } from "node:path";
 
 import { TaskCardSession } from "./card-session.js";
 import { unavailableAccountQuota } from "./account-quota.js";
@@ -34,6 +34,7 @@ import {
 } from "./device-card.js";
 import { deriveDeviceAvailability } from "./device-health.js";
 import { FallbackCardSession } from "./fallback-card-session.js";
+import { FIRST_SUCCESS_PROMPT } from "./first-success.js";
 import { eventSummary, LarkCli, logRef } from "./lark-cli.js";
 import {
   readBridgeHealth,
@@ -52,6 +53,10 @@ import {
   resolveModelPreference,
 } from "./model-capabilities.js";
 import {
+  renderPrivateHomeCard,
+  type PrivateHomeSnapshot,
+} from "./home-card.js";
+import {
   renderOnboardingCard,
   type OnboardingSnapshot,
 } from "./onboarding-card.js";
@@ -64,9 +69,11 @@ import {
 } from "./permission-lease.js";
 import {
   classifyCommand,
+  canReceiveUnboundGroupGuidance,
   externalActionLabel,
   externalActionsForPrompt,
   HELP_TEXT,
+  hasConfiguredBotMention,
   isAttachmentMessageType,
   isAuthorized,
   isAuthorizedCardAction,
@@ -98,7 +105,14 @@ import {
   type TaskProgressContext,
   type TaskProgress,
 } from "./progress.js";
-import { renderProjectCard } from "./project-card.js";
+import { projectGroupBindingCardFailureText, renderProjectCard } from "./project-card.js";
+import {
+  ProjectChatService,
+  isProjectChatReady,
+  projectChatSetupStatusText,
+  type ProjectChatSetupResult,
+  type ProjectChatTarget,
+} from "./project-chat-service.js";
 import {
   renderProjectOverviewCard,
   renderProjectOverviewText,
@@ -144,6 +158,7 @@ import {
 } from "./runbooks.js";
 import { renderSessionCenterCard } from "./session-card.js";
 import { sessionNameFromPrompt } from "./session-naming.js";
+import { sanitizeSessionPreview } from "./session-preview.js";
 import { StateStore } from "./state-store.js";
 import {
   renderRuntimeApprovalCard,
@@ -178,10 +193,13 @@ import {
   inferTaskMode,
   runningActivity,
   sandboxForTaskMode,
+  shouldClarifyContextualFollowUp,
+  shouldStartFreshAnswerThread,
   taskModeAllowsWrites,
   taskModeCapturesReview,
   taskModeLabel,
   taskModeOf,
+  type TaskMode,
 } from "./task-intent.js";
 import {
   canAccessProject,
@@ -210,6 +228,7 @@ import type {
   PermissionLeaseScope,
   PersistedConfirmationState,
   PersistedTaskState,
+  ProjectChatBinding,
   ReasoningEffort,
   SandboxMode,
   TaskAttachment,
@@ -218,6 +237,7 @@ import type {
 } from "./types.js";
 import { PACKAGE_ROOT, PACKAGE_VERSION } from "./version.js";
 import {
+  chatIdFromConversationKey,
   isTopicConversationKey,
   workspaceSessionForEvent,
   workspaceSessionForPrompt,
@@ -243,6 +263,46 @@ const lark = new LarkCli({
   cwd: config.projectDir,
   maxReplyChars: config.maxReplyChars,
 });
+const projectChatService = new ProjectChatService({
+  findByProject: (projectPath) => state.getProjectChatByProject(projectPath),
+  createRemoteChat: async (target) =>
+    lark.createProjectChat(
+      projectChatName(target.projectName),
+      projectChatDescription(target.projectName),
+      target.ownerId,
+      target.creationKey,
+    ),
+  persistCreatedBinding: async (target, created) =>
+    state.upsertProjectChat({
+      chatId: created.chatId,
+      projectPath: target.projectPath,
+      ownerId: target.ownerId,
+      name: created.name,
+      origin: "created",
+      membersStatus: "pending",
+      membersFingerprint: null,
+      workspaceStatus: "pending",
+      pinStatus: "pending",
+      messageStatus: "pending",
+      workspaceCardId: null,
+      workspaceMessageId: null,
+      lastErrorStep: null,
+      lastError: null,
+      lastAttemptAt: new Date().toISOString(),
+    }),
+  prepareBinding: prepareProjectChatBinding,
+  syncMembers: async (chatId, memberIds) => {
+    const result = await lark.addChatMembers(chatId, memberIds);
+    return {
+      added: Math.max(0, result.requested - result.unavailable - result.pendingApproval),
+      unavailable: result.unavailable,
+      pendingApproval: result.pendingApproval,
+    };
+  },
+  publishWorkspace: publishProjectChatWorkspace,
+  pinMessage: (messageId) => lark.pinMessage(messageId),
+  updateBinding: (chatId, patch) => state.updateProjectChatSetup(chatId, patch),
+});
 const shutdownController = new AbortController();
 const bridgeStartedAt = new Date().toISOString();
 let healthTimer: NodeJS.Timeout | null = null;
@@ -267,12 +327,14 @@ interface TaskRecord {
   settings: TaskExecutionSettings;
   allowThreadBinding: boolean;
   replyInThread: boolean;
+  freshThread: boolean;
 }
 
 interface TaskLaunchOptions {
   runbook?: { id: string; name: string };
   settings?: Partial<TaskExecutionSettings>;
   replyInThread?: boolean;
+  freshThread?: boolean;
 }
 
 interface TaskCardActionValue {
@@ -313,7 +375,7 @@ interface RunbookCardActionValue {
 
 interface ProjectCardActionValue {
   bridge: "feishu-codex-v2" | "feishu-codex-v3";
-  action: "select_project" | "toggle_project_favorite";
+  action: "select_project" | "toggle_project_favorite" | "project_chat";
 }
 
 interface ConfirmationCardActionValue {
@@ -382,7 +444,16 @@ interface V5CardActionValue {
     | "team_runbooks"
     | "team_projects"
     | "team_refresh"
+    | "home_first_task"
+    | "home_new_session"
+    | "home_projects"
+    | "home_sessions"
+    | "home_device"
+    | "home_project_chat"
+    | "home_refresh"
     | "onboarding_start"
+    | "onboarding_first_task"
+    | "onboarding_home"
     | "onboarding_device"
     | "onboarding_dismiss"
     | "onboarding_projects"
@@ -484,12 +555,14 @@ interface PendingRuntimeQuestion {
 
 const tasks = new Map<string, TaskRecord>();
 const projectCards = new Map<string, ProjectCardRecord>();
+const projectChatCardRefreshes = new Map<string, Promise<void>>();
 const deviceCards = new Map<string, DeviceCardRecord>();
 const controlCards = new Map<string, ControlCardRecord>();
 const sessionCards = new Map<string, ControlCardRecord>();
 const taskCenterCards = new Map<string, ControlCardRecord>();
 const teamCards = new Map<string, ControlCardRecord>();
 const runbookCards = new Map<string, ControlCardRecord>();
+const homeCards = new Map<string, ControlCardRecord>();
 const onboardingCards = new Map<string, ControlCardRecord>();
 const reviewCards = new Map<string, ReviewCardRecord>();
 const pendingConfirmations = new Map<string, PendingConfirmation>();
@@ -723,11 +796,7 @@ async function replyOnboardingCard(
   const snapshot = await buildOnboardingSnapshot(onboarding, conversationKey, ownerId, feedback);
   try {
     const cardId = await lark.createCard(renderOnboardingCard(snapshot));
-    const messageId = await lark.replyCard(
-      event.message_id,
-      cardId,
-      replyKey(event.event_id, phase),
-    );
+    const messageId = await deliverEntryCard(event, cardId, replyKey(event.event_id, phase));
     if (messageId) {
       onboardingCards.set(messageId, {
         cardId,
@@ -747,6 +816,19 @@ async function replyOnboardingCard(
       `${phase}-fallback`,
     );
   }
+}
+
+async function deliverEntryCard(
+  event: FeishuMessageEvent | FeishuCardActionEvent,
+  cardId: string,
+  idempotencyKey: string,
+): Promise<string | null> {
+  const direct = event.type === "im.message.receive_v1"
+    ? event.chat_type === "p2p"
+    : state.getChatType(event.chat_id) === "p2p";
+  return direct
+    ? lark.sendCard(event.chat_id, cardId, idempotencyKey)
+    : lark.replyCard(event.message_id, cardId, idempotencyKey);
 }
 
 async function buildOnboardingSnapshot(
@@ -798,13 +880,11 @@ function formatOnboardingSnapshot(snapshot: OnboardingSnapshot): string {
     ].join("\n");
   }
   return [
-    snapshot.state.status === "completed" ? "Codex 已准备好" : "欢迎使用 Codex",
+    snapshot.state.status === "completed" ? "第一次任务已完成" : "完成第一次 Codex 任务",
     `当前项目：${snapshot.projectName} · ${snapshot.sandboxLabel}`,
-    "直接发送一句完整要求即可，例如：“这个项目是做什么的？”或“运行测试并修复失败用例”。",
-    "继续同一件事就回复上一条消息；新事情发一条新消息。",
-    snapshot.groupChatEnabled
-      ? "团队协作时，一个项目建一个群。"
-      : "团队协作时，一个项目建一个群；团队群可以以后再开。",
+    snapshot.state.status === "completed"
+      ? "直接发送一句完整要求；继续同一件事就回复，另一件事先开新会话。"
+      : "先发送“这个项目是做什么的？”，系统会强制只读，不修改文件、不运行测试。",
   ].join("\n");
 }
 
@@ -823,7 +903,7 @@ async function openOnboarding(
   await audit(event.sender_id, "onboarding.open", "onboarding", conversationKey, "allowed");
 }
 
-async function maybeShowFirstRunOnboarding(
+async function ensureFirstRunOnboardingState(
   event: FeishuMessageEvent,
   conversationKey: string,
   ownerId: string,
@@ -832,12 +912,170 @@ async function maybeShowFirstRunOnboarding(
   const stateKey = onboardingStateKey(conversationKey, ownerId);
   if (!config.autoOnboarding || state.getOnboarding(stateKey)) return;
   try {
-    const onboarding = await state.setOnboarding(stateKey, ownerId, "active", 1);
-    await replyOnboardingCard(event, onboarding, "", "auto-onboarding");
-    await audit(ownerId, "onboarding.auto_open", "onboarding", conversationKey, "allowed");
+    await state.setOnboarding(stateKey, ownerId, "active", 1);
+    await audit(ownerId, "onboarding.auto_start", "onboarding", conversationKey, "allowed");
   } catch (error) {
-    console.error("[bridge] unable to show first-run onboarding", error);
+    console.error("[bridge] unable to initialize first-run onboarding", error);
   }
+}
+
+async function completeOnboardingAfterFirstSuccess(record: TaskRecord): Promise<void> {
+  const stateKey = onboardingStateKey(record.conversationKey, record.ownerId);
+  const onboarding = state.getOnboarding(stateKey);
+  if (onboarding?.status !== "active") return;
+  const completed = await state.setOnboarding(stateKey, record.ownerId, "completed", 4);
+  await audit(
+    record.ownerId,
+    "onboarding.first_success",
+    "onboarding",
+    record.conversationKey,
+    "allowed",
+    record.id,
+  );
+  await refreshFirstSuccessCards(record, completed);
+}
+
+async function refreshFirstSuccessCards(
+  task: TaskRecord,
+  onboarding: OnboardingState,
+): Promise<void> {
+  const onboardingSnapshot = await buildOnboardingSnapshot(
+    onboarding,
+    task.conversationKey,
+    task.ownerId,
+    "第一次任务已完成，可以直接继续使用。",
+  );
+  for (const [messageId, card] of onboardingCards) {
+    if (card.conversationKey !== task.conversationKey || card.ownerId !== task.ownerId) continue;
+    try {
+      card.sequence += 1;
+      await lark.updateCard(
+        card.cardId,
+        renderOnboardingCard(onboardingSnapshot),
+        card.sequence,
+      );
+    } catch (error) {
+      onboardingCards.delete(messageId);
+      console.warn(`[bridge] unable to complete onboarding card message=${logRef(messageId)}`, error);
+    }
+  }
+
+  const homeSnapshot = await buildPrivateHomeSnapshot(
+    task.conversationKey,
+    task.ownerId,
+    "第一次任务已完成。以后直接说目标即可。",
+  );
+  for (const [messageId, card] of homeCards) {
+    if (card.conversationKey !== task.conversationKey || card.ownerId !== task.ownerId) continue;
+    try {
+      card.sequence += 1;
+      await lark.updateCard(card.cardId, renderPrivateHomeCard(homeSnapshot), card.sequence);
+    } catch (error) {
+      homeCards.delete(messageId);
+      console.warn(`[bridge] unable to complete home card message=${logRef(messageId)}`, error);
+    }
+  }
+}
+
+async function replyPrivateHomeCard(
+  event: FeishuMessageEvent | FeishuCardActionEvent,
+  feedback = "",
+  phase = "home",
+  context?: { conversationKey: string; ownerId: string },
+): Promise<void> {
+  const ownerId = context?.ownerId ?? actorForEvent(event);
+  const conversationKey = context?.conversationKey ?? conversationForEvent(event);
+  const snapshot = await buildPrivateHomeSnapshot(conversationKey, ownerId, feedback);
+  try {
+    const cardId = await lark.createCard(renderPrivateHomeCard(snapshot));
+    const messageId = await deliverEntryCard(event, cardId, replyKey(event.event_id, phase));
+    if (messageId) {
+      homeCards.set(messageId, {
+        cardId,
+        conversationKey,
+        ownerId,
+        sequence: 0,
+        createdAt: Date.now(),
+      });
+      pruneControlCards(homeCards);
+    }
+  } catch (error) {
+    console.error("[bridge] private home card unavailable; falling back to text", error);
+    await productReply(
+      event.message_id,
+      formatPrivateHomeSnapshot(snapshot),
+      replyKey(event.event_id, `${phase}-fallback`),
+      `${phase}-fallback`,
+    );
+  }
+}
+
+async function buildPrivateHomeSnapshot(
+  conversationKey: string,
+  ownerId: string,
+  feedback = "",
+): Promise<PrivateHomeSnapshot> {
+  const project = await currentProject(conversationKey, ownerId);
+  const appServer = runner.getHealth();
+  const consumers = lark.getConsumerHealth();
+  const sampledAt = new Date().toISOString();
+  const lastSuccessfulTaskAt = state
+    .listTasks()
+    .filter((task) => task.ownerId === ownerId && task.status === "succeeded")
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0]?.updatedAt;
+  const settings = executionSettings(conversationKey, ownerId);
+  const role = roleForSender(config, ownerId) ?? "viewer";
+  const activeTask = runner.getActiveTask(conversationKey);
+  const onboarding = state.getOnboarding(onboardingStateKey(conversationKey, ownerId));
+  const projectChat = state.getProjectChatByProject(project.path);
+  return {
+    deviceName: hostname() || "本地 Mac",
+    availability: deriveDeviceAvailability({
+      consumers,
+      codex: appServer,
+      api: lark.getApiHealth(),
+      sampledAt,
+      ...(lastSuccessfulTaskAt ? { lastSuccessfulTaskAt } : {}),
+    }),
+    project: {
+      name: project.name,
+      isGitRepository: project.isGitRepository,
+    },
+    role,
+    modelLabel: settings.model ?? "Codex 默认",
+    sandboxLabel: permissionLabel(settings.sandboxMode),
+    hasSession: Boolean(state.getThread(conversationKey)),
+    ...(activeTask ? { activeTask } : {}),
+    queuedTasks: queue.queuedForConversation(conversationKey),
+    canOperate: canOperate(config, ownerId),
+    ...(onboarding ? { onboardingStatus: onboarding.status } : {}),
+    ...(projectChat
+      ? {
+          projectChatName: projectChat.name,
+          projectChatNeedsRepair: !isProjectChatReady(projectChat),
+        }
+      : {}),
+    ...(feedback ? { feedback } : {}),
+  };
+}
+
+function formatPrivateHomeSnapshot(snapshot: PrivateHomeSnapshot): string {
+  return [
+    `Codex 首页 · ${snapshot.project.name}`,
+    `- 设备：${snapshot.availability.title}`,
+    `- 会话：${snapshot.hasSession ? "继续当前" : "尚未开始"}`,
+    `- 权限：${snapshot.sandboxLabel}`,
+    `- 模型：${snapshot.modelLabel}`,
+    snapshot.activeTask
+      ? `- 当前任务：${snapshot.activeTask}`
+      : snapshot.queuedTasks > 0
+        ? `- 排队任务：${snapshot.queuedTasks}`
+        : "- 当前没有运行任务",
+    snapshot.onboardingStatus === "active" && snapshot.canOperate
+      ? "第一次使用可发送“这个项目是做什么的？”，系统会以只读方式回答。"
+      : "直接发送一句完整要求即可；另一件事先发送“新会话”。",
+    ...(snapshot.feedback ? [`- 操作结果：${snapshot.feedback}`] : []),
+  ].join("\n");
 }
 
 async function replyProjectCard(
@@ -873,6 +1111,15 @@ async function replyProjectCard(
     }
   } catch (error) {
     console.error("[bridge] project card unavailable; falling back to text", error);
+    if (phase === "project-group-bind") {
+      await productReply(
+        event.message_id,
+        projectGroupBindingCardFailureText(),
+        replyKey(event.event_id, `${phase}-fallback`),
+        `${phase}-fallback`,
+      );
+      return;
+    }
     const prefix = feedback ? `${feedback}\n\n` : "";
     await productReply(
       event.message_id,
@@ -924,6 +1171,11 @@ async function buildProjectWorkspace(
   } catch (error) {
     policyLabel = `策略错误 · ${(error as Error).message}`;
   }
+  const currentChatId = chatIdFromConversationKey(conversationKey);
+  const boundCurrentChat = state.getProjectChat(currentChatId);
+  const projectChat = state.getProjectChatByProject(current.path);
+  const requiresProjectBinding =
+    state.getChatType(currentChatId) === "group" && !boundCurrentChat;
   return {
     projects: ranked.projects,
     context: {
@@ -931,10 +1183,27 @@ async function buildProjectWorkspace(
       favoritePaths: ranked.favoritePaths,
       recentPaths: ranked.recentPaths,
       policyLabel,
-      canSwitch: canOperate(config, ownerId),
+      canSwitch:
+        requiresProjectBinding
+          ? canAdminister(config, ownerId)
+          : canOperate(config, ownerId) && !boundCurrentChat,
       activeTasks: runner.getActiveTask(conversationKey) ? 1 : 0,
       queuedTasks: queue.queuedForConversation(conversationKey),
       hasSavedThread: Boolean(state.getThread(conversationKey)),
+      ...(projectChat
+        ? {
+            projectChat: {
+              name: projectChat.name,
+              isCurrentChat: projectChat.chatId === currentChatId,
+              needsRepair: !isProjectChatReady(projectChat),
+            },
+          }
+        : {}),
+      canCreateProjectChat:
+        canOperate(config, ownerId) &&
+        state.getChatType(currentChatId) === "p2p" &&
+        !projectChat,
+      requiresProjectBinding,
     },
   };
 }
@@ -1779,6 +2048,25 @@ function operatingSystemLabel(): string {
   return `${system} ${release()} · ${arch()}`;
 }
 
+function previousTaskModeForThread(
+  conversationKey: string,
+  ownerId: string,
+  projectPath: string,
+): TaskMode | undefined {
+  const threadId = state.getThread(conversationKey);
+  if (!threadId) return undefined;
+  const previous = [...tasks.values()]
+    .filter(
+      (task) =>
+        task.conversationKey === conversationKey &&
+        task.ownerId === ownerId &&
+        task.project.path === projectPath &&
+        task.progress.threadId === threadId,
+    )
+    .sort((left, right) => right.progress.createdAt - left.progress.createdAt)[0];
+  return previous ? taskModeOf(previous.progress) : undefined;
+}
+
 async function enqueuePrompt(
   replyToMessageId: string,
   conversationKey: string,
@@ -1833,7 +2121,10 @@ async function enqueuePrompt(
   }
   const compatibility = compatibleModelSettings(requestedSettings, availableModels);
   const settings = compatibility.settings;
-  const taskMode = inferTaskMode(prompt);
+  const taskMode = inferTaskMode(
+    prompt,
+    previousTaskModeForThread(conversationKey, ownerId, project.path),
+  );
   settings.sandboxMode = sandboxForTaskMode(taskMode, settings.sandboxMode);
   if (compatibility.notices.length > 0) {
     await audit(
@@ -1847,6 +2138,8 @@ async function enqueuePrompt(
   }
   const id = makeTaskId(seed);
   const estimatedPosition = queue.nextPosition(conversationKey);
+  const replyInThread = launchOptions.replyInThread ?? false;
+  const freshThread = launchOptions.freshThread ?? false;
   const progress = createTaskProgress(
     id,
     prompt,
@@ -1860,7 +2153,11 @@ async function enqueuePrompt(
       reasoningLabel: settings.reasoningEffort
         ? reasoningEffortLabel(settings.reasoningEffort)
         : "默认推理",
-      sessionLabel: state.getThread(conversationKey) ? "继续当前会话" : "新会话",
+      sessionLabel: freshThread
+        ? "轻量新会话"
+        : state.getThread(conversationKey)
+          ? "继续当前会话"
+          : "新会话",
       ...(launchOptions.runbook ? { runbookLabel: launchOptions.runbook.name } : {}),
       ...taskCollaborationContext(ownerId, ownerId, project, conversationKey),
     },
@@ -1868,7 +2165,6 @@ async function enqueuePrompt(
   let card: TaskCardSession | null = null;
   let conversation: ConversationTurnSession | null = null;
   let fallbackCard: FallbackCardSession | null = null;
-  const replyInThread = launchOptions.replyInThread ?? false;
   const conversational = taskMode === "answer" || taskMode === "analyze";
 
   if (conversational) {
@@ -1927,6 +2223,7 @@ async function enqueuePrompt(
     settings,
     allowThreadBinding: true,
     replyInThread,
+    freshThread,
   };
   if (card) {
     card.onSnapshot((snapshot) => {
@@ -2026,7 +2323,9 @@ async function executeTaskRecord(record: TaskRecord): Promise<void> {
   record.status = "running";
   try {
     const taskMode = taskModeOf(record.progress);
-    const existingThreadId = state.getThread(record.conversationKey);
+    const existingThreadId = record.freshThread
+      ? undefined
+      : state.getThread(record.conversationKey);
     const projectPolicy = await loadProjectPolicy(record.project.path);
     const actionDecision = decideProjectActions(
       projectPolicy,
@@ -2206,6 +2505,9 @@ async function executeTaskRecord(record: TaskRecord): Promise<void> {
         replyKey(record.seed, `completed-${record.id}`),
       );
     }
+    await completeOnboardingAfterFirstSuccess(record).catch((error) => {
+      console.warn(`[bridge] unable to complete first-success onboarding task=${record.id}`, error);
+    });
     await persistTaskRecord(record);
     await audit(record.ownerId, "task.complete", "task", record.id, "allowed");
   } catch (error) {
@@ -2424,7 +2726,16 @@ async function handleEvent(raw: unknown): Promise<void> {
     console.error("[bridge] ignored event with unexpected shape");
     return;
   }
-  if (!isAuthorized(event, config)) {
+  const canStartGroupBinding =
+    event.chat_type === "group" &&
+    !state.getProjectChat(event.chat_id) &&
+    canAdminister(config, event.sender_id);
+  const canExplainUnboundGroup = canReceiveUnboundGroupGuidance(
+    event,
+    config,
+    Boolean(state.getProjectChat(event.chat_id)),
+  );
+  if (!isAuthorized(event, config) && !canStartGroupBinding && !canExplainUnboundGroup) {
     console.warn(`[bridge] rejected unauthorized ${eventSummary(event)}`);
     return;
   }
@@ -2436,6 +2747,70 @@ async function handleEvent(raw: unknown): Promise<void> {
   inFlightEvents.add(event.event_id);
   try {
     await state.setChatType(event.chat_id, event.chat_type);
+    const existingProjectChat = event.chat_type === "group"
+      ? state.getProjectChat(event.chat_id)
+      : undefined;
+    if (
+      existingProjectChat &&
+      existingProjectChat.messageStatus !== "succeeded" &&
+      (!isTextualMessageType(event.message_type) ||
+        !hasConfiguredBotMention(event.content, config.botMentionNames))
+    ) {
+      const verifiedProjectChat = await state.updateProjectChatSetup(event.chat_id, {
+        messageStatus: "succeeded",
+        lastAttemptAt: new Date().toISOString(),
+        ...(existingProjectChat.lastErrorStep === "messages"
+          ? { lastErrorStep: null, lastError: null }
+          : {}),
+      });
+      await audit(
+        event.sender_id,
+        "project.chat.messages_verified",
+        "project",
+        existingProjectChat.projectPath,
+        "allowed",
+        "ordinary group message delivered",
+      );
+      void scheduleProjectChatWorkspaceRefresh(verifiedProjectChat.chatId).catch((error) => {
+        console.warn(
+          `[bridge] unable to refresh verified project chat workspace chat=${logRef(verifiedProjectChat.chatId)}`,
+          error,
+        );
+      });
+    }
+    if (event.chat_type === "group" && !state.getProjectChat(event.chat_id)) {
+      if (!canAdminister(config, event.sender_id)) {
+        await productReply(
+          event.message_id,
+          "这个群还没有绑定项目。请让 Codex 管理员在群里发送“项目”，完成第一次也是唯一一次选择。",
+          replyKey(event.event_id, "project-group-admin-required"),
+          "project-group-admin-required",
+        );
+        await state.markEventIfNew(event.event_id);
+        return;
+      }
+      // The group remains untrusted until the immutable binding is durably stored.
+      // Before that point it may only render the administrator binding card.
+      const conversationKey = key(event);
+      const project = await currentProject(conversationKey, event.sender_id);
+      await replyProjectCard(
+        event,
+        project,
+        "请选择这个群唯一对应的项目。绑定完成前不会执行任何 Codex 任务。",
+        "project-group-bind",
+        { conversationKey, ownerId: event.sender_id },
+      );
+      await audit(
+        event.sender_id,
+        "project.chat.bind_start",
+        "project",
+        event.chat_id,
+        "allowed",
+        "administrator initiated first binding",
+      );
+      await state.markEventIfNew(event.event_id);
+      return;
+    }
     await handleAuthorizedMessage(event);
     await state.markEventIfNew(event.event_id);
   } finally {
@@ -2533,7 +2908,7 @@ async function handleAuthorizedMessage(event: FeishuMessageEvent): Promise<void>
     }
   }
   if (isAttachmentMessageType(event.message_type)) {
-    await maybeShowFirstRunOnboarding(event, conversationKey, actorId);
+    await ensureFirstRunOnboardingState(event, conversationKey, actorId);
     if (!(await requireOperator(event, "attachment"))) return;
     try {
       const workspaceSession = await preparePromptWorkspaceSession(event, actorId);
@@ -2582,12 +2957,32 @@ async function handleAuthorizedMessage(event: FeishuMessageEvent): Promise<void>
     await openOnboarding(event);
     return;
   }
-  await maybeShowFirstRunOnboarding(event, conversationKey, actorId);
+  await ensureFirstRunOnboardingState(event, conversationKey, actorId);
+
+  if (
+    command === "prompt" &&
+    shouldClarifyContextualFollowUp(prompt, {
+      hasThread: Boolean(state.getThread(conversationKey)),
+      hasActiveTask: Boolean(runner.getActiveTask(conversationKey)),
+      queuedTasks: queue.queuedForConversation(conversationKey),
+    })
+  ) {
+    await reply(
+      event,
+      "当前没有可继续的会话。请直接写出完整目标；如果要接着以前的工作，请发送“会话”并恢复对应记录。",
+      "contextual-follow-up-empty",
+    );
+    return;
+  }
 
   switch (command) {
     case "help":
       await reply(event, HELP_TEXT, "help");
       return;
+    case "home": {
+      await replyPrivateHomeCard(event);
+      return;
+    }
     case "status": {
       await replyDeviceCard(event);
       return;
@@ -2621,6 +3016,24 @@ async function handleAuthorizedMessage(event: FeishuMessageEvent): Promise<void>
         return;
       }
       const current = await currentProject(conversationKey, actorId);
+      const projectChat = state.getProjectChat(chatIdFromConversationKey(conversationKey));
+      if (projectChat && current.path !== resolution.project.path) {
+        await replyProjectCard(
+          event,
+          current,
+          `本群已固定连接 ${current.name}，不能切换到其他项目。请回机器人私聊创建或打开另一个项目群。`,
+          "switch-project-chat-blocked",
+        );
+        await audit(
+          actorId,
+          "project.switch",
+          "project",
+          resolution.project.path,
+          "denied",
+          "project chat is fixed",
+        );
+        return;
+      }
       if (current.path === resolution.project.path) {
         await replyProjectCard(
           event,
@@ -2942,7 +3355,13 @@ async function handleAuthorizedMessage(event: FeishuMessageEvent): Promise<void>
               event.event_id,
               [],
               [],
-              { replyInThread: workspaceSession.replyInThread },
+              {
+                replyInThread: workspaceSession.replyInThread,
+                freshThread: shouldStartFreshAnswerThread(prompt, {
+                  hasThread: Boolean(state.getThread(workspaceSession.conversationKey)),
+                  isReply: Boolean(event.reply_to || event.root_id || event.thread_id),
+                }),
+              },
             );
           }
         }
@@ -2960,7 +3379,27 @@ async function handleCardAction(raw: unknown): Promise<void> {
     console.error("[bridge] ignored card action with unexpected shape");
     return;
   }
-  if (!isAuthorizedCardAction(event, config)) {
+  const parsedAction = parseCardActionValue(event);
+  const bindingCard = projectCards.get(event.message_id);
+  const canFinishGroupBinding = Boolean(
+    parsedAction?.action === "select_project" &&
+      bindingCard &&
+      conversationBelongsToChat(bindingCard.conversationKey, event.chat_id) &&
+      !state.getProjectChat(event.chat_id) &&
+      canAdminister(config, event.operator_id),
+  );
+  const canExplainGroupBinding = Boolean(
+    parsedAction?.action === "select_project" &&
+      bindingCard &&
+      conversationBelongsToChat(bindingCard.conversationKey, event.chat_id) &&
+      !state.getProjectChat(event.chat_id) &&
+      roleForSender(config, event.operator_id),
+  );
+  if (
+    !isAuthorizedCardAction(event, config) &&
+    !canFinishGroupBinding &&
+    !canExplainGroupBinding
+  ) {
     console.warn(
       `[bridge] rejected unauthorized card action event=${logRef(event.event_id)} operator=${logRef(event.operator_id)}`,
     );
@@ -2969,7 +3408,9 @@ async function handleCardAction(raw: unknown): Promise<void> {
   if (
     config.sandboxMode === "danger-full-access" &&
     !config.allowedChatIds.has(event.chat_id) &&
-    state.getChatType(event.chat_id) !== "p2p"
+    state.getChatType(event.chat_id) !== "p2p" &&
+    !canFinishGroupBinding &&
+    !canExplainGroupBinding
   ) {
     console.warn(
       `[bridge] rejected full-access card action from an untrusted chat event=${logRef(event.event_id)}`,
@@ -2984,7 +3425,24 @@ async function handleCardAction(raw: unknown): Promise<void> {
   inFlightEvents.add(event.event_id);
   runtimeHealth.lastCardActionAt = Date.now();
   try {
-    await handleAuthorizedCardAction(event);
+    if (canExplainGroupBinding && !canFinishGroupBinding) {
+      await productReply(
+        event.message_id,
+        "这个群还没有绑定项目。只有 Codex 管理员能完成首次绑定；请联系管理员在这张卡片上选择项目。绑定前不会执行任何任务。",
+        replyKey(event.event_id, "project-group-admin-required-action"),
+        "project-group-admin-required-action",
+      );
+      await audit(
+        event.operator_id,
+        "project.chat.bind",
+        "project",
+        event.option ?? "unknown",
+        "denied",
+        "administrator required",
+      );
+    } else {
+      await handleAuthorizedCardAction(event);
+    }
     await state.markEventIfNew(event.event_id);
   } finally {
     inFlightEvents.delete(event.event_id);
@@ -3024,6 +3482,10 @@ async function handleAuthorizedCardAction(event: FeishuCardActionEvent): Promise
   }
   if (action.action === "toggle_project_favorite") {
     await handleProjectFavoriteToggle(event);
+    return;
+  }
+  if (action.action === "project_chat") {
+    await handleProjectChatAction(event);
     return;
   }
   if (!("task_id" in action)) return;
@@ -3480,7 +3942,106 @@ async function handleProjectCardSelection(event: FeishuCardActionEvent): Promise
   const ownerId = cardRecord?.ownerId ?? event.operator_id;
   const current = await currentProject(conversationKey, ownerId);
   let feedback: string;
-  if (current.path === selected.path) {
+  const chatId = chatIdFromConversationKey(conversationKey);
+  let projectChat = state.getProjectChat(chatId);
+  const firstGroupBinding = state.getChatType(chatId) === "group" && !projectChat;
+  let blockedByProjectChat = Boolean(projectChat && current.path !== selected.path);
+  let bindingCompleted = false;
+  if (firstGroupBinding && !canAdminister(config, event.operator_id)) {
+    feedback = "只有 Codex 管理员可以为群聊完成第一次项目绑定。";
+    blockedByProjectChat = true;
+    await audit(
+      event.operator_id,
+      "project.chat.bind",
+      "project",
+      selected.path,
+      "denied",
+      "administrator required",
+    );
+  } else if (firstGroupBinding) {
+    const existingProjectChat = state.getProjectChatByProject(selected.path);
+    if (existingProjectChat) {
+      feedback = `项目 ${selected.name} 已经绑定了项目群“${existingProjectChat.name}”，请选择其他项目。`;
+      blockedByProjectChat = true;
+      await audit(
+        event.operator_id,
+        "project.chat.bind",
+        "project",
+        selected.path,
+        "denied",
+        "project already has a chat",
+      );
+    } else {
+      let chatName = `${selected.name} · 项目群`;
+      try {
+        chatName = (await lark.getChatName(chatId)) || chatName;
+      } catch (error) {
+        console.warn(`[bridge] unable to read existing project chat name chat=${logRef(chatId)}`, error);
+      }
+      try {
+        projectChat = await state.upsertProjectChat({
+          chatId,
+          projectPath: selected.path,
+          ownerId: event.operator_id,
+          name: chatName,
+          origin: "existing",
+          membersStatus: "succeeded",
+          membersFingerprint: null,
+          workspaceStatus: "pending",
+          pinStatus: "pending",
+          messageStatus: "pending",
+          workspaceCardId: null,
+          workspaceMessageId: null,
+          lastErrorStep: null,
+          lastError: null,
+          lastAttemptAt: new Date().toISOString(),
+        });
+        config.allowedChatIds.add(chatId);
+        await state.setProject(conversationKey, selected.path);
+        await state.recordProjectUse(ownerId, selected.path);
+        feedback = `绑定完成：本群已永久固定到 ${selected.name}，之后不再支持切换项目。`;
+        bindingCompleted = true;
+        await audit(
+          event.operator_id,
+          "project.chat.bind",
+          "project",
+          selected.path,
+          "allowed",
+          "first and immutable binding",
+        );
+      } catch (error) {
+        if (projectChat) {
+          await state.updateProjectChatSetup(projectChat.chatId, {
+            lastErrorStep: "binding",
+            lastError: safeErrorText(error, 500),
+            lastAttemptAt: new Date().toISOString(),
+          });
+          feedback = `项目绑定已保存，但群工作区初始化失败：${safeErrorText(error)}。请重新发送“项目”修复。`;
+        } else {
+          feedback = `绑定失败：${safeErrorText(error)}`;
+        }
+        blockedByProjectChat = true;
+        await audit(
+          event.operator_id,
+          "project.chat.bind",
+          "project",
+          selected.path,
+          "failed",
+          safeErrorText(error),
+        );
+      }
+    }
+  } else if (blockedByProjectChat) {
+    feedback = `本群已固定连接 ${current.name}，不能切换到其他项目。请回机器人私聊创建或打开另一个项目群。`;
+    await audit(
+      event.operator_id,
+      "project.switch",
+      "project",
+      selected.path,
+      "denied",
+      "project chat is fixed",
+    );
+  } else if (current.path === selected.path) {
     feedback = `当前已经是 ${selected.name}，无需切换。`;
   } else {
     const cancelledActive = runner.cancel(conversationKey);
@@ -3499,8 +4060,20 @@ async function handleProjectCardSelection(event: FeishuCardActionEvent): Promise
   console.info(
     `[bridge] selected project=${logRef(selected.path)} chat=${logRef(event.chat_id)}`,
   );
-  await audit(event.operator_id, "project.switch", "project", selected.path, "allowed");
+  if (!blockedByProjectChat && !firstGroupBinding) {
+    await audit(event.operator_id, "project.switch", "project", selected.path, "allowed");
+  }
   if (!cardRecord) {
+    if (bindingCompleted && projectChat) {
+      await state.updateProjectChatSetup(projectChat.chatId, {
+        workspaceStatus: "failed",
+        workspaceCardId: null,
+        workspaceMessageId: null,
+        lastErrorStep: "workspace",
+        lastError: "首次绑定卡记录已过期，无法转换为项目工作台。",
+        lastAttemptAt: new Date().toISOString(),
+      });
+    }
     await productReply(
       event.message_id,
       feedback,
@@ -3511,11 +4084,12 @@ async function handleProjectCardSelection(event: FeishuCardActionEvent): Promise
   }
 
   try {
-    const workspace = await buildProjectWorkspace(conversationKey, ownerId, selected);
+    const displayedProject = blockedByProjectChat && !bindingCompleted ? current : selected;
+    const workspace = await buildProjectWorkspace(conversationKey, ownerId, displayedProject);
     cardRecord.sequence += 1;
     await lark.updateCard(
       cardRecord.cardId,
-      renderProjectCard(workspace.projects, selected, feedback, workspace.context),
+      renderProjectCard(workspace.projects, displayedProject, feedback, workspace.context),
       cardRecord.sequence,
     );
     await state.upsertProjectCard({
@@ -3526,11 +4100,72 @@ async function handleProjectCardSelection(event: FeishuCardActionEvent): Promise
       sequence: cardRecord.sequence,
       createdAt: cardRecord.createdAt,
     });
+    if (bindingCompleted && projectChat) {
+      projectChat = await state.updateProjectChatSetup(projectChat.chatId, {
+        workspaceStatus: "succeeded",
+        workspaceCardId: cardRecord.cardId,
+        workspaceMessageId: event.message_id,
+        pinStatus: "pending",
+        lastErrorStep: null,
+        lastError: null,
+        lastAttemptAt: new Date().toISOString(),
+      });
+      try {
+        await lark.pinMessage(event.message_id);
+        await state.updateProjectChatSetup(projectChat.chatId, {
+          pinStatus: "succeeded",
+          lastErrorStep: null,
+          lastError: null,
+          lastAttemptAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        const pinError = safeErrorText(error, 500);
+        await state.updateProjectChatSetup(projectChat.chatId, {
+          pinStatus: "failed",
+          lastErrorStep: "pin",
+          lastError: pinError,
+          lastAttemptAt: new Date().toISOString(),
+        });
+        console.warn(
+          `[bridge] existing project group bound but workspace card pin failed chat=${logRef(chatId)}`,
+          error,
+        );
+        cardRecord.sequence += 1;
+        await lark.updateCard(
+          cardRecord.cardId,
+          renderProjectCard(
+            workspace.projects,
+            displayedProject,
+            `${feedback} 工作台可以使用，但置顶失败；重新发送“项目”后可重试。`,
+            workspace.context,
+          ),
+          cardRecord.sequence,
+        );
+        await state.upsertProjectCard({
+          messageId: event.message_id,
+          cardId: cardRecord.cardId,
+          conversationKey: cardRecord.conversationKey,
+          ownerId: cardRecord.ownerId,
+          sequence: cardRecord.sequence,
+          createdAt: cardRecord.createdAt,
+        });
+      }
+    }
   } catch (error) {
     console.error(
       `[bridge] project card update failed message=${logRef(event.message_id)}`,
       error,
     );
+    if (bindingCompleted && projectChat) {
+      await state.updateProjectChatSetup(projectChat.chatId, {
+        workspaceStatus: "failed",
+        workspaceCardId: null,
+        workspaceMessageId: null,
+        lastErrorStep: "workspace",
+        lastError: safeErrorText(error, 500),
+        lastAttemptAt: new Date().toISOString(),
+      });
+    }
     await productReply(
       event.message_id,
       feedback,
@@ -3592,6 +4227,340 @@ async function handleProjectFavoriteToggle(event: FeishuCardActionEvent): Promis
       "project-changed",
     );
   }
+}
+
+async function handleProjectChatAction(event: FeishuCardActionEvent): Promise<void> {
+  const record = projectCards.get(event.message_id);
+  if (
+    !record ||
+    !conversationBelongsToChat(record.conversationKey, event.chat_id) ||
+    !canViewOwnedResource(config, event.operator_id, record.ownerId)
+  ) {
+    await productReply(
+      event.message_id,
+      "这张项目卡已过期，或不属于你。请发送“项目”重新打开。",
+      replyKey(event.event_id, "project-chat-unavailable"),
+      "project-chat-unavailable",
+    );
+    await audit(event.operator_id, "project.chat.open", "security", event.message_id, "denied");
+    return;
+  }
+
+  const project = await currentProject(record.conversationKey, record.ownerId);
+  let binding = state.getProjectChatByProject(project.path);
+  let feedback: string;
+  try {
+    if (!binding) {
+      if (
+        state.getChatType(event.chat_id) !== "p2p" ||
+        !canControlOwnedResource(config, event.operator_id, record.ownerId)
+      ) {
+        feedback = "请在机器人私聊中创建项目群；这样可以确认创建者和项目归属。";
+        await updateProjectCardRecord(event, record, project, feedback);
+        await audit(
+          event.operator_id,
+          "project.chat.create",
+          "project",
+          project.path,
+          "denied",
+          "creation requires owner private chat",
+        );
+        return;
+      }
+    }
+    if (binding && binding.ownerId !== event.operator_id) {
+      binding = await state.updateProjectChatSetup(binding.chatId, {
+        membersStatus: "pending",
+        lastAttemptAt: new Date().toISOString(),
+      });
+    }
+    const result = await provisionProjectChat(project, record.ownerId, record.conversationKey);
+    binding = result.binding;
+    feedback = projectChatSetupStatusText(result);
+    const shared = await lark.sendSharedChat(
+      event.chat_id,
+      result.binding.chatId,
+      replyKey(event.event_id, "project-chat-share"),
+    );
+    if (!shared) {
+      feedback += " 项目群本身不受影响，但群入口消息发送失败；再次点击可重新发送入口。";
+    }
+    await audit(
+      event.operator_id,
+      result.created ? "project.chat.create" : "project.chat.open",
+      "project",
+      project.path,
+      result.ready ? "allowed" : "failed",
+      result.ready
+        ? result.binding.chatId
+        : result.issues.map((issue) => `${issue.step}: ${issue.message}`).join("; "),
+    );
+  } catch (error) {
+    feedback = projectChatFailureMessage(error);
+    await audit(
+      event.operator_id,
+      binding ? "project.chat.open" : "project.chat.create",
+      "project",
+      project.path,
+      "failed",
+      safeErrorText(error),
+    );
+  }
+  await updateProjectCardRecord(event, record, project, feedback);
+}
+
+async function provisionProjectChat(
+  project: CodexProject,
+  ownerId: string,
+  sourceConversationKey: string,
+): Promise<ProjectChatSetupResult> {
+  const creationKey = createHash("sha256")
+    .update(`${config.instanceId}\u0000${project.path}`)
+    .digest("hex")
+    .slice(0, 40);
+  const memberIds = teamMembers(config)
+    .filter((member) => canAccessProject(config, member.id, project))
+    .map((member) => member.id)
+    .filter((memberId) => memberId !== ownerId);
+  return projectChatService.provision({
+    projectPath: project.path,
+    projectName: project.name,
+    ownerId,
+    memberIds,
+    creationKey,
+    sourceConversationKey,
+  });
+}
+
+async function prepareProjectChatBinding(
+  binding: ProjectChatBinding,
+  target: ProjectChatTarget,
+): Promise<void> {
+  config.allowedChatIds.add(binding.chatId);
+  await state.setChatType(binding.chatId, "group");
+
+  const groupConversationKey = config.groupSessionScope === "member"
+    ? `${binding.chatId}::${target.ownerId}`
+    : binding.chatId;
+  await state.setProject(groupConversationKey, target.projectPath);
+  const sourcePreferences = state.getPreferences(target.sourceConversationKey);
+  if (sourcePreferences) {
+    const { updatedAt: _updatedAt, ...preferences } = sourcePreferences;
+    await state.setPreferences(groupConversationKey, preferences);
+  }
+  await state.recordProjectUse(target.ownerId, target.projectPath);
+}
+
+async function publishProjectChatWorkspace(
+  binding: ProjectChatBinding,
+  target: ProjectChatTarget,
+): Promise<{ cardId: string; messageId: string }> {
+  const project = projectRegistry.getByPath(target.projectPath);
+  if (!project) throw new Error("项目已不在本机项目列表中，无法生成群工作台。");
+  const conversationKey = config.groupSessionScope === "member"
+    ? `${binding.chatId}::${target.ownerId}`
+    : binding.chatId;
+  const workspace = await buildProjectWorkspace(conversationKey, target.ownerId, project);
+  const cardId = await lark.createCard(
+    renderProjectCard(
+      workspace.projects,
+      project,
+      "项目已固定。请直接发送一条不 @ 机器人的普通消息验证连接；若没有回复，先 @ 机器人并检查群消息权限。每个话题是一段独立 Codex 会话。",
+      workspace.context,
+    ),
+  );
+  const messageId = await lark.sendCard(
+    binding.chatId,
+    cardId,
+    `project-chat-workspace-${logRef(binding.chatId)}`,
+  );
+  if (!messageId) throw new Error("飞书没有返回项目工作台消息标识。");
+  const record = {
+    cardId,
+    conversationKey,
+    ownerId: target.ownerId,
+    sequence: 0,
+    createdAt: Date.now(),
+  };
+  projectCards.set(messageId, record);
+  await state.upsertProjectCard({ messageId, ...record });
+  pruneProjectCards();
+  return { cardId, messageId };
+}
+
+async function reconcilePersistedProjectChatSetups(): Promise<void> {
+  for (const binding of state.listProjectChats()) {
+    const project = projectRegistry.getByPath(binding.projectPath);
+    if (!project || !canAccessProject(config, binding.ownerId, project)) continue;
+    const sourceConversationKey = config.groupSessionScope === "member"
+      ? `${binding.chatId}::${binding.ownerId}`
+      : binding.chatId;
+    try {
+      const result = await provisionProjectChat(project, binding.ownerId, sourceConversationKey);
+      await audit(
+        binding.ownerId,
+        "project.chat.reconcile",
+        "project",
+        binding.projectPath,
+        result.ready ? "allowed" : "failed",
+        result.ready
+          ? "persisted project chat reconciled after restart"
+          : result.issues.map((issue) => `${issue.step}: ${issue.message}`).join("; "),
+      );
+    } catch (error) {
+      console.warn(
+        `[bridge] unable to reconcile persisted project chat setup chat=${logRef(binding.chatId)}`,
+        error,
+      );
+    }
+  }
+}
+
+function projectChatResultFromBinding(binding: ProjectChatBinding): ProjectChatSetupResult {
+  const issues: ProjectChatSetupResult["issues"] = [];
+  const fallbackMessages = {
+    members: "成员同步尚未完成。",
+    workspace: "项目工作台尚未完成。",
+    pin: "项目工作台尚未置顶。",
+    messages: "尚未收到不 @ 机器人的普通群消息，群消息权限仍待验证。",
+  } as const;
+  for (const step of ["members", "workspace", "pin", "messages"] as const) {
+    const status = step === "members"
+      ? binding.membersStatus
+      : step === "workspace"
+        ? binding.workspaceStatus
+        : step === "pin"
+          ? binding.pinStatus
+          : binding.messageStatus;
+    if (status === "succeeded") continue;
+    issues.push({
+      step,
+      message:
+        binding.lastErrorStep === step && binding.lastError
+          ? binding.lastError
+          : fallbackMessages[step],
+    });
+  }
+  return {
+    binding,
+    created: false,
+    ready: isProjectChatReady(binding),
+    issues,
+  };
+}
+
+async function refreshProjectChatWorkspaceCard(chatId: string): Promise<void> {
+  const binding = state.getProjectChat(chatId);
+  if (!binding?.workspaceMessageId) return;
+  const record = projectCards.get(binding.workspaceMessageId);
+  if (!record) return;
+  const project = projectRegistry.getByPath(binding.projectPath);
+  if (!project || !canAccessProject(config, record.ownerId, project)) return;
+  const workspace = await buildProjectWorkspace(
+    record.conversationKey,
+    record.ownerId,
+    project,
+  );
+  const feedback = projectChatSetupStatusText(projectChatResultFromBinding(binding));
+  record.sequence += 1;
+  await lark.updateCard(
+    record.cardId,
+    renderProjectCard(workspace.projects, project, feedback, workspace.context),
+    record.sequence,
+  );
+  await state.upsertProjectCard({
+    messageId: binding.workspaceMessageId,
+    cardId: record.cardId,
+    conversationKey: record.conversationKey,
+    ownerId: record.ownerId,
+    sequence: record.sequence,
+    createdAt: record.createdAt,
+  });
+}
+
+function scheduleProjectChatWorkspaceRefresh(chatId: string): Promise<void> {
+  const previous = projectChatCardRefreshes.get(chatId) ?? Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(() => refreshProjectChatWorkspaceCard(chatId))
+    .finally(() => {
+      if (projectChatCardRefreshes.get(chatId) === next) {
+        projectChatCardRefreshes.delete(chatId);
+      }
+    });
+  projectChatCardRefreshes.set(chatId, next);
+  return next;
+}
+
+async function refreshPersistedProjectChatCards(): Promise<void> {
+  let refreshed = 0;
+  for (const binding of state.listProjectChats()) {
+    if (!binding.workspaceMessageId || !projectCards.has(binding.workspaceMessageId)) continue;
+    await scheduleProjectChatWorkspaceRefresh(binding.chatId);
+    refreshed += 1;
+  }
+  if (refreshed > 0) {
+    console.info(`[bridge] refreshed ${refreshed} persisted project chat card(s)`);
+  }
+}
+
+async function updateProjectCardRecord(
+  event: FeishuCardActionEvent,
+  record: ProjectCardRecord,
+  project: CodexProject,
+  feedback: string,
+): Promise<void> {
+  try {
+    const workspace = await buildProjectWorkspace(record.conversationKey, record.ownerId, project);
+    record.sequence += 1;
+    await lark.updateCard(
+      record.cardId,
+      renderProjectCard(workspace.projects, project, feedback, workspace.context),
+      record.sequence,
+    );
+    await state.upsertProjectCard({
+      messageId: event.message_id,
+      cardId: record.cardId,
+      conversationKey: record.conversationKey,
+      ownerId: record.ownerId,
+      sequence: record.sequence,
+      createdAt: record.createdAt,
+    });
+  } catch (error) {
+    console.warn("[bridge] unable to update project chat action card", error);
+    await productReply(
+      event.message_id,
+      feedback,
+      replyKey(event.event_id, "project-chat-feedback"),
+      "project-chat-feedback",
+    );
+  }
+}
+
+function projectChatName(projectName: string): string {
+  const safeName = projectName
+    .replace(/[\u0000-\u001f\u007f<>]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 48) || "Codex 项目";
+  return `${safeName} · Codex`.slice(0, 60);
+}
+
+function projectChatDescription(projectName: string): string {
+  const safeName = projectName
+    .replace(/[\u0000-\u001f\u007f<>]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 38) || "当前项目";
+  return `固定连接本地项目 ${safeName}。每个话题对应一段独立 Codex 会话。`.slice(0, 100);
+}
+
+function projectChatFailureMessage(error: unknown): string {
+  const message = safeErrorText(error);
+  if (/im:chat:create|99991672|permission/i.test(message)) {
+    return "项目群没有创建：飞书应用还缺少自动建群权限。请管理员为机器人开通 im:chat:create 后，在这里重试；不需要修改本地配置。";
+  }
+  return `项目群暂时不可用：${message}`;
 }
 
 async function handleDeviceCardAction(
@@ -3811,6 +4780,10 @@ async function handleV5CardAction(
   event: FeishuCardActionEvent,
   action: V5CardActionValue,
 ): Promise<void> {
+  if (action.action.startsWith("home_")) {
+    await handleHomeCardAction(event, action);
+    return;
+  }
   if (action.action.startsWith("onboarding_")) {
     await handleOnboardingCardAction(event, action);
     return;
@@ -4120,6 +5093,189 @@ async function handleV5CardAction(
   }
 }
 
+async function handleHomeCardAction(
+  event: FeishuCardActionEvent,
+  action: V5CardActionValue,
+): Promise<void> {
+  const record = homeCards.get(event.message_id);
+  if (
+    !record ||
+    !conversationBelongsToChat(record.conversationKey, event.chat_id) ||
+    !canViewOwnedResource(config, event.operator_id, record.ownerId)
+  ) {
+    await productReply(
+      event.message_id,
+      "这张首页卡已过期，或不属于你。请发送“状态”重新打开。",
+      replyKey(event.event_id, "home-unavailable"),
+      "home-unavailable",
+    );
+    await audit(event.operator_id, action.action, "security", event.message_id, "denied");
+    return;
+  }
+
+  switch (action.action) {
+    case "home_refresh":
+      await updatePrivateHomeCard(event, record, "首页状态已刷新。");
+      return;
+    case "home_device":
+      await replyDeviceCard(event, "", "home-device", record);
+      await updatePrivateHomeCard(event, record, "设备详情已发送到下方。");
+      return;
+    case "home_projects": {
+      try {
+        await projectRegistry.refresh();
+        const project = await currentProject(record.conversationKey, record.ownerId);
+        await replyProjectCard(event, project, "", "home-projects", record);
+        await updatePrivateHomeCard(event, record, "项目列表已发送到下方。");
+      } catch (error) {
+        await updatePrivateHomeCard(event, record, `项目列表不可用：${(error as Error).message}`);
+      }
+      return;
+    }
+    case "home_sessions":
+      await replySessionCenter(event, "", "home-sessions", record);
+      await updatePrivateHomeCard(event, record, "历史会话已发送到下方。");
+      return;
+    case "home_project_chat": {
+      const project = await currentProject(record.conversationKey, record.ownerId);
+      let binding = state.getProjectChatByProject(project.path);
+      try {
+        if (!binding) {
+          if (!canControlOwnedResource(config, event.operator_id, record.ownerId)) {
+            await updatePrivateHomeCard(event, record, "你没有权限为这个项目创建群聊。");
+            return;
+          }
+          if (state.getChatType(event.chat_id) !== "p2p") {
+            await updatePrivateHomeCard(
+              event,
+              record,
+              "请在机器人私聊首页创建项目群；这样可以确认创建者和项目归属。",
+            );
+            return;
+          }
+        }
+        if (binding && binding.ownerId !== event.operator_id) {
+          binding = await state.updateProjectChatSetup(binding.chatId, {
+            membersStatus: "pending",
+            lastAttemptAt: new Date().toISOString(),
+          });
+        }
+        const result = await provisionProjectChat(project, record.ownerId, record.conversationKey);
+        binding = result.binding;
+        const shared = await lark.sendSharedChat(
+          event.chat_id,
+          result.binding.chatId,
+          replyKey(event.event_id, "home-project-chat-share"),
+        );
+        let feedback = projectChatSetupStatusText(result);
+        if (!shared) {
+          feedback += " 项目群本身不受影响，但入口消息发送失败；再次点击可重新发送。";
+        }
+        await audit(
+          event.operator_id,
+          result.created ? "project.chat.create" : "project.chat.open",
+          "project",
+          project.path,
+          result.ready ? "allowed" : "failed",
+          result.ready
+            ? result.binding.chatId
+            : result.issues.map((issue) => `${issue.step}: ${issue.message}`).join("; "),
+        );
+        await updatePrivateHomeCard(
+          event,
+          record,
+          feedback,
+        );
+      } catch (error) {
+        await updatePrivateHomeCard(event, record, projectChatFailureMessage(error));
+      }
+      return;
+    }
+    case "home_new_session": {
+      if (!canControlOwnedResource(config, event.operator_id, record.ownerId)) {
+        await updatePrivateHomeCard(event, record, "你没有权限重置这段会话。");
+        return;
+      }
+      const active = runner.cancel(record.conversationKey);
+      const queued = queue.cancelPending(record.conversationKey);
+      await closeRuntimeInteractionsForConversation(record.conversationKey);
+      const reset = await state.resetThread(record.conversationKey);
+      const feedback = `新会话已准备好 · 旧上下文${reset ? "已清除" : "原本为空"}${active || queued ? ` · 已停止 ${active ? 1 : 0} 个运行任务和 ${queued} 个排队任务` : ""}`;
+      await audit(event.operator_id, "session.new", "session", record.conversationKey, "allowed");
+      await updatePrivateHomeCard(event, record, feedback);
+      return;
+    }
+    case "home_first_task": {
+      if (!canControlOwnedResource(config, event.operator_id, record.ownerId)) {
+        await updatePrivateHomeCard(event, record, "你现在是只读成员，不能启动 Codex 任务。");
+        return;
+      }
+      try {
+        await updatePrivateHomeCard(event, record, "正在启动第一次只读任务…");
+        const taskId = await startFirstSuccessTask(event, record);
+        await updatePrivateHomeCard(
+          event,
+          record,
+          `只读任务 ${taskId} 已开始。完成后，这里会自动进入正常使用状态。`,
+        );
+      } catch (error) {
+        await updatePrivateHomeCard(
+          event,
+          record,
+          `任务没有启动：${(error as Error).message}`,
+        );
+      }
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+async function startFirstSuccessTask(
+  event: FeishuCardActionEvent,
+  record: ControlCardRecord,
+): Promise<string> {
+  const snapshot = await buildPrivateHomeSnapshot(record.conversationKey, record.ownerId);
+  if (!snapshot.availability.canExecute) {
+    throw new Error(snapshot.availability.nextAction);
+  }
+  const stateKey = onboardingStateKey(record.conversationKey, record.ownerId);
+  const onboarding = state.getOnboarding(stateKey);
+  if (!onboarding || onboarding.status !== "active") {
+    await state.setOnboarding(stateKey, record.ownerId, "active", 1);
+  }
+  return enqueuePrompt(
+    event.message_id,
+    record.conversationKey,
+    record.ownerId,
+    FIRST_SUCCESS_PROMPT,
+    event.event_id,
+    [],
+    [],
+  );
+}
+
+async function updatePrivateHomeCard(
+  event: FeishuCardActionEvent,
+  record: ControlCardRecord,
+  feedback = "",
+): Promise<void> {
+  const snapshot = await buildPrivateHomeSnapshot(
+    record.conversationKey,
+    record.ownerId,
+    feedback,
+  );
+  try {
+    record.sequence += 1;
+    await lark.updateCard(record.cardId, renderPrivateHomeCard(snapshot), record.sequence);
+  } catch (error) {
+    console.error("[bridge] private home card update failed", error);
+    homeCards.delete(event.message_id);
+    await replyPrivateHomeCard(event, feedback, "home-recreated", record);
+  }
+}
+
 async function grantFullAccessLease(
   conversationKey: string,
   ownerId: string,
@@ -4229,6 +5385,28 @@ async function handleOnboardingCardAction(
   let feedback = "";
 
   switch (action.action) {
+    case "onboarding_first_task": {
+      if (!canControlOwnedResource(config, event.operator_id, record.ownerId)) {
+        feedback = "你现在是只读成员，不能启动 Codex 任务。";
+        break;
+      }
+      try {
+        feedback = "正在启动第一次只读任务…";
+        await updateOnboardingCard(event, record, onboarding, feedback);
+        const taskId = await startFirstSuccessTask(event, record);
+        onboarding = state.getOnboarding(stateKey) ?? onboarding;
+        feedback = onboarding.status === "completed"
+          ? "第一次任务已完成，可以直接继续使用。"
+          : `只读任务 ${taskId} 已开始。任务完成后，引导会自动结束。`;
+      } catch (error) {
+        feedback = `任务没有启动：${(error as Error).message}`;
+      }
+      break;
+    }
+    case "onboarding_home":
+      await replyPrivateHomeCard(event, "", "onboarding-home", record);
+      feedback = "首页已发送到下方。";
+      break;
     case "onboarding_start":
       onboarding = await state.setOnboarding(stateKey, record.ownerId, "active", 1);
       feedback = "";
@@ -5122,10 +6300,33 @@ function visibleSessions(
   currentThreadId: string | undefined,
   sessions: CodexThreadSummary[],
 ): CodexThreadSummary[] {
-  if (canAdminister(config, ownerId)) return sessions;
-  const owned = state.listOwnedThreadIds(ownerId, projectPath);
-  if (currentThreadId) owned.add(currentThreadId);
-  return sessions.filter((session) => owned.has(session.id));
+  let visible = sessions;
+  if (!canAdminister(config, ownerId)) {
+    const owned = state.listOwnedThreadIds(ownerId, projectPath);
+    if (currentThreadId) owned.add(currentThreadId);
+    visible = sessions.filter((session) => owned.has(session.id));
+  }
+  return visible.map((session) => {
+    const latestTask = [...tasks.values()]
+      .filter(
+        (task) =>
+          task.project.path === projectPath &&
+          task.progress.threadId === session.id &&
+          (canAdminister(config, ownerId) || task.ownerId === ownerId),
+      )
+      .sort((left, right) => right.progress.createdAt - left.progress.createdAt)[0];
+    const userPreview = latestTask?.prompt;
+    const preview = redactSensitiveText(
+      sanitizeSessionPreview(userPreview || session.preview),
+      240,
+    );
+    const name = latestTask
+      ? sessionNameFromPrompt(latestTask.prompt, latestTask.project.name)
+      : session.name
+        ? redactSensitiveText(sanitizeSessionPreview(session.name), 120)
+        : null;
+    return { ...session, name, preview };
+  });
 }
 
 function executionSettings(conversationKey: string, actorId: string): TaskExecutionSettings {
@@ -5429,6 +6630,7 @@ async function persistTaskRecord(record: TaskRecord): Promise<void> {
       ? { conversationMessageSequence: conversation.sequenceNumber }
       : {}),
     ...(record.replyInThread ? { replyInThread: true } : {}),
+    ...(record.freshThread ? { freshThread: true } : {}),
     attachments: structuredClone(record.attachments),
     allowedExternalActions: [...record.allowedExternalActions],
     settings: { ...record.settings },
@@ -5576,6 +6778,7 @@ async function restorePersistedRecords(): Promise<void> {
       settings: saved.settings,
       allowThreadBinding: saved.status === "queued" || saved.status === "running",
       replyInThread: saved.replyInThread ?? false,
+      freshThread: saved.freshThread ?? false,
     };
     if (card) {
       card.onSnapshot((snapshot) => {
@@ -5719,6 +6922,24 @@ async function restorePersistedRecords(): Promise<void> {
 }
 
 async function currentProject(conversationKey: string, actorId: string): Promise<CodexProject> {
+  const projectChat = state.getProjectChat(chatIdFromConversationKey(conversationKey));
+  if (projectChat) {
+    let boundProject = projectRegistry.getByPath(projectChat.projectPath);
+    if (!boundProject) {
+      await projectRegistry.refresh();
+      boundProject = projectRegistry.getByPath(projectChat.projectPath);
+    }
+    if (!boundProject) {
+      throw new Error(`这个项目群绑定的本地项目已经不可用：${projectChat.name}。`);
+    }
+    if (!canAccessProject(config, actorId, boundProject)) {
+      throw new Error(`你的账号没有被授权访问项目 ${boundProject.name}。`);
+    }
+    if (state.getProject(conversationKey) !== boundProject.path) {
+      await state.setProject(conversationKey, boundProject.path);
+    }
+    return boundProject;
+  }
   const savedPath = state.getProject(conversationKey);
   const accessible = () => visibleProjects(config, actorId, projectRegistry.list());
   if (!savedPath) {
@@ -5867,7 +7088,16 @@ function parseCardActionValue(event: FeishuCardActionEvent): CardActionValue | n
           "team_runbooks",
           "team_projects",
           "team_refresh",
+          "home_first_task",
+          "home_new_session",
+          "home_projects",
+          "home_sessions",
+          "home_device",
+          "home_project_chat",
+          "home_refresh",
           "onboarding_start",
+          "onboarding_first_task",
+          "onboarding_home",
           "onboarding_device",
           "onboarding_dismiss",
           "onboarding_projects",
@@ -5937,7 +7167,11 @@ function parseCardActionValue(event: FeishuCardActionEvent): CardActionValue | n
       };
     }
     if (value.bridge !== "feishu-codex-v2" && value.bridge !== "feishu-codex-v3") return null;
-    if (value.action === "select_project" || value.action === "toggle_project_favorite") {
+    if (
+      value.action === "select_project" ||
+      value.action === "toggle_project_favorite" ||
+      value.action === "project_chat"
+    ) {
       return {
         bridge: value.bridge,
         action: value.action,
@@ -6176,14 +7410,13 @@ function bridgeHealthStatus(): BridgeHealthStatus {
 }
 
 async function publishBridgeHealth(status = bridgeHealthStatus()): Promise<void> {
-  const configFile = process.env.DOTENV_CONFIG_PATH?.trim();
   const api = lark.getApiHealth();
   await writeBridgeHealth(config.dataDir, {
     status,
     instanceId: config.instanceId,
     pid: process.pid,
     startedAt: bridgeStartedAt,
-    configFile: configFile ? resolve(configFile) : null,
+    configFile: config.configFile ?? null,
     productVersion: PACKAGE_VERSION,
     packageRoot: PACKAGE_ROOT,
     activeTasks: queue.activeCount,
@@ -6320,6 +7553,10 @@ async function main(): Promise<void> {
   await publishBridgeHealth("starting");
   ownsHealthMarker = true;
   await state.load();
+  for (const binding of state.listProjectChats()) {
+    config.allowedChatIds.add(binding.chatId);
+    await state.setChatType(binding.chatId, "group");
+  }
   if (state.getRemoteReady()) {
     try {
       await remoteReady.setEnabled(true);
@@ -6331,6 +7568,7 @@ async function main(): Promise<void> {
   startOutboxTimer();
   const discoveredProjects = await projectRegistry.refresh();
   await restorePersistedRecords();
+  await reconcilePersistedProjectChatSetups();
   await runMaintenance();
   startMaintenanceTimer();
   console.info(
@@ -6350,6 +7588,9 @@ async function main(): Promise<void> {
       });
       void refreshPersistedDeviceCards(recovery).catch((error) => {
         console.error("[bridge] unable to refresh recovered device cards", error);
+      });
+      void refreshPersistedProjectChatCards().catch((error) => {
+        console.error("[bridge] unable to refresh persisted project chat cards", error);
       });
       startHealthTimer();
     }

@@ -162,26 +162,30 @@ function content(snapshot: OnboardingSnapshot): string {
       "需要执行工作时，请联系管理员调整你的角色。",
     ].join("\n");
   }
+  if (snapshot.state.status === "completed") {
+    return [
+      "**第一次任务已经完成。**",
+      "",
+      "以后只需要记住这三件事：",
+      "- 直接发一句完整要求，Codex 会在当前项目里工作",
+      "- 继续同一件事就直接回复；另一件事先开新会话",
+      "- 需要换仓库时先切换项目",
+      "",
+      snapshot.groupChatEnabled
+        ? "团队协作时，建议一个项目建一个群。"
+        : "团队群可以以后再配置，不影响个人使用。",
+    ].join("\n");
+  }
   return [
-    snapshot.state.status === "completed"
-      ? "**可以开始了，直接在聊天框里说你想做什么。**"
-      : "**直接在聊天框里说你想做什么。**",
+    "**先完成一次真实任务，不需要先学命令。**",
     "",
-    "你可以这样说：",
-    "- `这个项目是做什么的？`",
-    "- `找出登录慢的原因，先不要修改文件。`",
-    snapshot.canWrite
-      ? "- `运行测试，修复失败用例并说明改了什么。`"
-      : "- `检查现有测试并说明风险，不要修改文件。`",
+    `当前项目：**${safe(snapshot.projectName)}**`,
+    "点击“了解当前项目”，Codex 会回答：",
+    "- 这个项目的定位和技术栈",
+    "- 主要入口与当前完成度",
+    "- 最值得先做的下一步",
     "",
-    "继续同一件事，直接回复上一条消息；新事情就发一条新消息。",
-    "",
-    snapshot.groupChatEnabled
-      ? "**团队协作**：一个项目建一个群，每件新事发一条新消息。"
-      : "**团队协作**：一个项目建一个群；团队群可以以后再开，不影响现在使用。",
-    ...(snapshot.canWrite
-      ? []
-      : ["", "当前是只读模式；需要写文件时，可打开设置调整权限。"]),
+    "这一步强制只读：不会修改文件，也不会运行测试或构建。",
   ].join("\n");
 }
 
@@ -216,7 +220,7 @@ function actionRows(snapshot: OnboardingSnapshot): Record<string, unknown>[] {
   if (snapshot.state.status === "completed") {
     return [
       actionRow("onboard_actions", [
-        button("打开控制台", "onboarding_device", "primary"),
+        button("打开首页", "onboarding_home", "primary"),
         button("重新查看引导", "onboarding_restart", "default"),
       ]),
     ];
@@ -234,11 +238,11 @@ function actionRows(snapshot: OnboardingSnapshot): Record<string, unknown>[] {
   }
   return [
     actionRow("onboard_primary", [
-      button("知道了，开始使用", "onboarding_finish", "primary"),
+      button("了解当前项目（只读）", "onboarding_first_task", "primary"),
     ]),
     actionRow("onboard_secondary", [
       button("换项目", "onboarding_projects", "default"),
-      button("调整设置", "onboarding_settings", "default"),
+      button("跳过引导", "onboarding_dismiss", "default"),
     ]),
   ];
 }
@@ -273,7 +277,7 @@ function headerTitle(snapshot: OnboardingSnapshot): string {
   if (snapshot.state.status === "dismissed") return "引导已关闭";
   if (!snapshot.deviceOnline) return "正在连接本地 Codex";
   if (!snapshot.projectAvailable) return "先选择一个项目";
-  if (snapshot.state.status === "completed") return "可以开始了";
+  if (snapshot.state.status === "completed") return "第一次任务已完成";
   return snapshot.role === "viewer" ? "欢迎使用 Codex" : "开始使用 Codex";
 }
 
@@ -282,13 +286,15 @@ function headerSubtitle(snapshot: OnboardingSnapshot): string {
   if (!snapshot.deviceOnline) return "查看连接状态，恢复后即可继续";
   if (!snapshot.projectAvailable) return "只需从已授权项目中选择";
   if (snapshot.role === "viewer") return `${safe(snapshot.projectName)} · 只读`;
-  return `${safe(snapshot.projectName)} · ${safe(snapshot.sandboxLabel)}`;
+  if (snapshot.state.status === "completed") return `${safe(snapshot.projectName)} · 已准备好`;
+  return `${safe(snapshot.projectName)} · 第一次只读任务`;
 }
 
 function footerText(snapshot: OnboardingSnapshot): string {
   if (!snapshot.deviceOnline) return "本地连接恢复后才能执行工作。";
   if (!snapshot.projectAvailable) return "这里只会显示管理员已经授权的项目。";
   if (snapshot.role === "viewer") return "只读成员不会触发本地执行或文件修改。";
+  if (snapshot.state.status === "active") return "第一次任务固定只读；完成后再按需调整权限。";
   return "任务只会在当前项目中运行；提交、推送、部署和 PR 仍需单独确认。";
 }
 

@@ -23,7 +23,7 @@ for (const expected of [
   `@larksuite/cli \`${manifest.dependencies?.["@larksuite/cli"]}\``,
   "BRIDGE_CONFIG_VERSION=1",
   "persisted state v6",
-  "SQLite schema v1",
+  "SQLite schema v3",
 ]) {
   if (!compatibility.includes(expected)) {
     throw new Error(`docs/COMPATIBILITY.md is missing release contract: ${expected}`);

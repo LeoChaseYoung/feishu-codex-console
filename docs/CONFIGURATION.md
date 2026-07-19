@@ -10,7 +10,7 @@ The recommended path is `feishu-codex-console init`. It writes a private `0600` 
 | `FEISHU_ADMIN_OPEN_IDS` | operators | Administrators; configure explicitly for a team |
 | `FEISHU_VIEWER_OPEN_IDS` | empty | Read-only dashboard and status members |
 | `FEISHU_MEMBER_LABELS_JSON` | empty | Product-facing labels; missing labels become anonymous member codes |
-| `ALLOWED_FEISHU_CHAT_IDS` | private chats only | Optional chat allowlist; full-access groups require it |
+| `ALLOWED_FEISHU_CHAT_IDS` | empty | Optional bootstrap allowlist for legacy groups; first project binding now persists trust automatically |
 | `FEISHU_GROUP_SESSION_SCOPE` | `member` | `member` isolates each group member; `chat` deliberately shares context |
 | `FEISHU_PROJECT_ACL_JSON` | empty | Project selector to member-ID arrays; admins bypass ACLs |
 | `FEISHU_BOT_MENTION_NAMES` | empty | Names stripped from leading group mentions |

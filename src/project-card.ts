@@ -11,6 +11,17 @@ export interface ProjectCardContext {
   queuedTasks?: number;
   hasSavedThread?: boolean;
   policyLabel?: string;
+  projectChat?: {
+    name: string;
+    isCurrentChat: boolean;
+    needsRepair?: boolean;
+  };
+  canCreateProjectChat?: boolean;
+  requiresProjectBinding?: boolean;
+}
+
+export function projectGroupBindingCardFailureText(): string {
+  return "项目绑定卡发送失败，因此本群仍未授权，也不会执行任务。请管理员检查 CardKit 卡片创建权限和 card.action.trigger 事件订阅，修复后在群里发送“项目”重试。";
 }
 
 export function renderProjectCard(
@@ -21,6 +32,7 @@ export function renderProjectCard(
 ): FeishuCard {
   const gitCount = projects.filter((project) => project.isGitRepository).length;
   const folderCount = projects.length - gitCount;
+  const fixedProjectChat = Boolean(context.projectChat?.isCurrentChat && context.canSwitch === false);
 
   return {
     schema: "2.0",
@@ -37,38 +49,179 @@ export function renderProjectCard(
       },
     },
     header: {
-      title: { tag: "plain_text", content: "Codex 项目工作台" },
+      title: {
+        tag: "plain_text",
+        content: context.requiresProjectBinding ? "为这个群选择项目" : "Codex 项目工作台",
+      },
       subtitle: {
         tag: "plain_text",
-        content: "选择项目后，后续任务会在对应目录中执行",
+        content: context.requiresProjectBinding
+          ? "第一次选定后永久固定，不支持切换"
+          : fixedProjectChat
+            ? "本群只连接这一个项目；每个话题是一段独立会话"
+          : "后续任务会在当前项目目录中执行",
       },
       template: "blue",
       icon: { tag: "standard_icon", token: "myai_colorful" },
-      text_tag_list: [
-        {
-          tag: "text_tag",
-          text: { tag: "plain_text", content: `${projects.length} 个项目` },
-          color: "blue",
-        },
-        {
-          tag: "text_tag",
-          text: { tag: "plain_text", content: "自动同步" },
-          color: "violet",
-        },
-      ],
+      text_tag_list: fixedProjectChat
+        ? [
+            {
+              tag: "text_tag",
+              text: { tag: "plain_text", content: "项目已固定" },
+              color: "green",
+            },
+            {
+              tag: "text_tag",
+              text: { tag: "plain_text", content: "话题隔离" },
+              color: "blue",
+            },
+          ]
+        : [
+            {
+              tag: "text_tag",
+              text: { tag: "plain_text", content: `${projects.length} 个项目` },
+              color: "blue",
+            },
+            {
+              tag: "text_tag",
+              text: { tag: "plain_text", content: "自动同步" },
+              color: "violet",
+            },
+          ],
     },
     body: {
       direction: "vertical",
       padding: "12px 12px 20px 12px",
       vertical_spacing: "12px",
-      elements: [
-        currentProjectBlock(current, feedback, context),
-        projectFavoriteAction(current, context),
-        projectSelector(projects, current, context),
-        projectStats(projects.length, gitCount, folderCount),
-      ],
+      elements: context.requiresProjectBinding
+        ? [
+            projectBindingIntro(feedback),
+            projectSelector(projects, current, context),
+            projectStats(projects.length, gitCount, folderCount),
+          ]
+        : fixedProjectChat
+          ? [
+              currentProjectBlock(current, feedback, context),
+              ...projectChatPanel(context),
+            ]
+          : [
+            currentProjectBlock(current, feedback, context),
+            ...projectChatPanel(context),
+            projectFavoriteAction(current, context),
+            projectSelector(projects, current, context),
+            projectStats(projects.length, gitCount, folderCount),
+          ],
     },
   };
+}
+
+function projectBindingIntro(feedback: string): Record<string, unknown> {
+  return {
+    tag: "column_set",
+    element_id: "project_binding_intro",
+    flex_mode: "none",
+    columns: [
+      {
+        tag: "column",
+        width: "weighted",
+        weight: 1,
+        background_style: "turquoise-50",
+        padding: "12px 12px 12px 12px",
+        vertical_spacing: "6px",
+        elements: [
+          {
+            tag: "markdown",
+            element_id: "project_binding_title",
+            content: "**这个群还没有连接本地项目**",
+          },
+          {
+            tag: "markdown",
+            element_id: "project_binding_detail",
+            text_size: "caption",
+            content:
+              "<font color='grey'>请选择一次。确认后，机器人会记住群与项目的关系；群内所有新任务都在该项目运行。</font>",
+          },
+          ...(feedback
+            ? [
+                {
+                  tag: "markdown",
+                  element_id: "project_binding_feedback",
+                  text_size: "caption",
+                  content: `<font color='red'>${safeMarkdown(feedback)}</font>`,
+                },
+              ]
+            : []),
+        ],
+      },
+    ],
+  };
+}
+
+function projectChatPanel(context: ProjectCardContext): Record<string, unknown>[] {
+  if (!context.projectChat && !context.canCreateProjectChat) return [];
+  const current = context.projectChat?.isCurrentChat ?? false;
+  const needsRepair = context.projectChat?.needsRepair ?? false;
+  const title = current
+    ? "本群已固定连接这个项目"
+    : needsRepair
+      ? `项目群待修复：${safeMarkdown(context.projectChat?.name ?? "")}`
+      : context.projectChat
+        ? `项目群：${safeMarkdown(context.projectChat.name)}`
+        : "为这个项目创建专属群";
+  const detail = current
+    ? "群内每个新话题对应一段独立 Codex 会话；项目不能在本群内切换。"
+    : needsRepair
+      ? "群与项目已经绑定；点击后只补成员、工作台或置顶的未完成步骤，不会重复建群。"
+      : context.projectChat
+        ? "项目已经有专属群，点击即可在飞书中打开。"
+        : "机器人会自动建群、绑定项目并发送工作区入口，不需要复制 chat_id 或修改配置。";
+  const elements: Record<string, unknown>[] = [
+    {
+      tag: "markdown",
+      element_id: "project_chat_copy",
+      content: `**${title}**\n<font color='grey'>${detail}</font>`,
+    },
+  ];
+  if (!current) {
+    elements.push({
+      tag: "button",
+      element_id: "project_chat_action",
+      text: {
+        tag: "plain_text",
+        content: needsRepair
+          ? "修复并打开项目群"
+          : context.projectChat
+            ? "打开项目群"
+            : "一键创建项目群",
+      },
+      type: "primary_filled",
+      width: "fill",
+      behaviors: [
+        {
+          type: "callback",
+          value: { bridge: "feishu-codex-v3", action: "project_chat" },
+        },
+      ],
+    });
+  }
+  return [
+    {
+      tag: "column_set",
+      element_id: "project_chat_panel",
+      flex_mode: "none",
+      columns: [
+        {
+          tag: "column",
+          width: "weighted",
+          weight: 1,
+          background_style: current ? "green-50" : "turquoise-50",
+          padding: "12px 12px 12px 12px",
+          vertical_spacing: "8px",
+          elements,
+        },
+      ],
+    },
+  ];
 }
 
 function currentProjectBlock(
@@ -145,6 +298,7 @@ function projectSelector(
   context: ProjectCardContext,
 ): Record<string, unknown> {
   const canSwitch = context.canSwitch ?? true;
+  const binding = context.requiresProjectBinding ?? false;
   const favorite = new Set(context.favoritePaths ?? []);
   const recent = new Set(context.recentPaths ?? []);
   const switchImpact = switchImpactLabel(context);
@@ -164,7 +318,9 @@ function projectSelector(
           {
             tag: "markdown",
             element_id: "selector_title",
-            content: "**查找并切换项目**\n<font color='grey'>可以输入项目名或路径搜索；收藏和最近使用排在前面</font>",
+            content: binding
+              ? "**选择这个群唯一对应的项目**\n<font color='grey'>可以输入项目名或路径搜索；请确认无误，绑定后不支持切换</font>"
+              : "**查找并切换项目**\n<font color='grey'>可以输入项目名或路径搜索；收藏和最近使用排在前面</font>",
           },
           {
             tag: "select_static",
@@ -172,7 +328,7 @@ function projectSelector(
             name: "project_path",
             width: "fill",
             placeholder: { tag: "plain_text", content: "选择一个项目" },
-            initial_option: current.path,
+            ...(binding ? {} : { initial_option: current.path }),
             options: projects.slice(0, 100).map((project) => ({
               text: {
                 tag: "plain_text",
@@ -181,10 +337,15 @@ function projectSelector(
               value: project.path,
             })),
             confirm: {
-              title: { tag: "plain_text", content: "确认切换项目？" },
+              title: {
+                tag: "plain_text",
+                content: binding ? "确认绑定这个项目？" : "确认切换项目？",
+              },
               text: {
                 tag: "plain_text",
-                content: switchImpact,
+                content: binding
+                  ? "选定后，这个群将永久固定到该项目，不支持切换。"
+                  : switchImpact,
               },
             },
             behaviors: [
@@ -199,13 +360,15 @@ function projectSelector(
             element_id: "selector_hint",
             text_size: "caption",
             content:
-              `<font color='grey'>${safeMarkdown(switchImpact)}${projects.length > 100 ? `\n当前显示前 100 个；也可发送“切换 项目名或路径”搜索全部 ${projects.length} 个。` : ""}</font>`,
+              `<font color='grey'>${safeMarkdown(binding ? "绑定前不会执行任何 Codex 任务。" : switchImpact)}${projects.length > 100 ? `\n当前显示前 100 个；也可发送“切换 项目名或路径”搜索全部 ${projects.length} 个。` : ""}</font>`,
           },
         ] : [
           {
             tag: "markdown",
             element_id: "selector_readonly",
-            content: "**项目列表为只读**\n<font color='grey'>当前身份可以查看项目和收藏当前项目，但不能切换执行目录。</font>",
+            content: context.projectChat?.isCurrentChat
+              ? "**项目已锁定**\n<font color='grey'>这个群首次选定项目后不再支持切换；新话题会继续使用当前项目。</font>"
+              : "**项目列表为只读**\n<font color='grey'>当前身份可以查看项目和收藏当前项目，但不能切换执行目录。</font>",
           },
         ],
       },

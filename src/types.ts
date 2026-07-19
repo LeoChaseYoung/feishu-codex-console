@@ -139,6 +139,7 @@ export interface PersistedTaskState {
   conversationMessageId?: string;
   conversationMessageSequence?: number;
   replyInThread?: boolean;
+  freshThread?: boolean;
   attachments: TaskAttachment[];
   allowedExternalActions: ExternalAction[];
   settings: TaskExecutionSettings;
@@ -170,6 +171,44 @@ export interface ProjectUsageState {
   favorite: boolean;
   lastUsedAt?: string;
   useCount: number;
+}
+
+export type ProjectChatOrigin = "existing" | "created";
+export type ProjectChatStepStatus = "pending" | "succeeded" | "failed" | "unknown";
+export type ProjectChatSetupStep = "binding" | "members" | "workspace" | "pin" | "messages";
+
+export interface ProjectChatBinding {
+  chatId: string;
+  projectPath: string;
+  ownerId: string;
+  name: string;
+  origin: ProjectChatOrigin;
+  membersStatus: ProjectChatStepStatus;
+  membersFingerprint: string | null;
+  workspaceStatus: ProjectChatStepStatus;
+  pinStatus: ProjectChatStepStatus;
+  messageStatus: ProjectChatStepStatus;
+  workspaceCardId: string | null;
+  workspaceMessageId: string | null;
+  lastErrorStep: ProjectChatSetupStep | null;
+  lastError: string | null;
+  lastAttemptAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectChatSetupPatch {
+  origin?: ProjectChatOrigin;
+  membersStatus?: ProjectChatStepStatus;
+  membersFingerprint?: string | null;
+  workspaceStatus?: ProjectChatStepStatus;
+  pinStatus?: ProjectChatStepStatus;
+  messageStatus?: ProjectChatStepStatus;
+  workspaceCardId?: string | null;
+  workspaceMessageId?: string | null;
+  lastErrorStep?: ProjectChatSetupStep | null;
+  lastError?: string | null;
+  lastAttemptAt?: string | null;
 }
 
 export interface PersistedConfirmationState {

@@ -1,6 +1,6 @@
 # Feishu Codex Console
 
-[10 分钟快速上手](docs/QUICKSTART.md) · [English](README.en.md) · [安装](docs/INSTALLATION.md) · [配置](docs/CONFIGURATION.md) · [兼容与升级](docs/COMPATIBILITY.md) · [Roadmap](ROADMAP.md)
+[10 分钟快速上手](docs/QUICKSTART.md) · [全项目 SOP](docs/SOP_INDEX.md) · [正向流程](docs/USER_SOP.md) · [逆向恢复](docs/FAILURE_RECOVERY_SOP.md) · [English](README.en.md) · [安装](docs/INSTALLATION.md) · [配置](docs/CONFIGURATION.md) · [兼容与升级](docs/COMPATIBILITY.md) · [Roadmap](ROADMAP.md)
 
 把本地 Codex thread 映射成一个可持续交流、可以协作和接管的飞书工作会话。人在外面时，可以在飞书里继续提问、分析、写文件、修改代码、回答 Codex 追问并处理权限确认；本机不需要开放公网端口。
 
@@ -61,15 +61,15 @@ flowchart LR
 npx feishu-codex-console@next init
 ```
 
-向导会检查 Node、Codex 登录和飞书 Bot 身份，等待一条测试消息自动识别 `open_id`/`chat_id`，提供个人安全、团队安全和高级模式三档权限预设，并把配置以 `0600` 权限写入用户配置目录。自检通过后，它会安装 macOS LaunchAgent 或 Linux systemd user service。
+向导会检查 Node、Codex 登录和飞书 Bot 身份，发现项目群权限缺失或无法核验时，会打开飞书官方确认页，一键申请**本产品所需的最小权限**；用户只需核对差异并确认，不需要搜索 scope。随后向导会识别 `open_id`/`chat_id`、选择安全预设，并以 `0600` 权限写入配置，最后安装 macOS LaunchAgent 或 Linux systemd user service。
 
-第一次部署直接看 [10 分钟快速上手](docs/QUICKSTART.md)。完整步骤见 [安装指南](docs/INSTALLATION.md)，全部配置见 [配置参考](docs/CONFIGURATION.md)，常见问题见 [故障排查](docs/TROUBLESHOOTING.md)，五分钟完整闭环见 [产品演示](docs/DEMO.md)。产品方向和逐项需求见 [产品需求地图](docs/PRODUCT_REQUIREMENTS_MAP.md)，公开路线见 [Roadmap](ROADMAP.md)，版本与依赖承诺见 [兼容矩阵](docs/COMPATIBILITY.md)。
+第一次部署直接看 [10 分钟快速上手](docs/QUICKSTART.md)。从安装、日常使用、团队协作到升级卸载的统一入口是 [全项目 SOP 总览](docs/SOP_INDEX.md)；团队上线按 [全项目正向 SOP](docs/USER_SOP.md) 和 [全项目逆向与恢复 SOP](docs/FAILURE_RECOVERY_SOP.md) 验收，自动化与实机边界见 [验收测试矩阵](docs/ACCEPTANCE_TEST_MATRIX.md)。完整步骤见 [安装指南](docs/INSTALLATION.md)，全部配置见 [配置参考](docs/CONFIGURATION.md)，常见问题见 [故障排查](docs/TROUBLESHOOTING.md)，五分钟完整闭环见 [产品演示](docs/DEMO.md)。产品方向和逐项需求见 [产品需求地图](docs/PRODUCT_REQUIREMENTS_MAP.md)，公开路线见 [Roadmap](ROADMAP.md)，版本与依赖承诺见 [兼容矩阵](docs/COMPATIBILITY.md)。
 
 从源码安装：
 
 ```bash
-git clone https://github.com/LeoChaseYoung/feishu-codex-console.git
-cd feishu-codex-console
+git clone https://github.com/LeoChaseYoung/feishu-codex-bridge.git
+cd feishu-codex-bridge
 npm install
 npx lark-cli config init --new
 npx lark-cli whoami --as bot
@@ -124,8 +124,9 @@ npm start
 
 常用命令：
 
-- `新手引导` / `/start` / `/onboarding`：重新打开自适应欢迎卡。
-- `控制台` / `状态`：打开本地设备控制台；额度只显示紧凑摘要。
+- `新手引导` / `/start` / `/onboarding`：用一次只读真实任务完成上手。
+- `状态` / `首页` / `/home`：打开轻量首页，查看当前项目、会话、权限和下一步。
+- `控制台` / `设备` / `/device`：打开详细设备控制台，检查连接、远程就绪和运行状态。
 - `额度` / `/usage` / `/quota`：独立查看 Codex 各滚动窗口的剩余比例、重置时间和可用重置次数。
 - `项目` / `/projects`：打开项目工作台。
 - `读取项目` / `/overview`：本地读取 Git、README、包清单和文件索引，生成 0 AI token 项目快照。
@@ -146,7 +147,9 @@ npm start
 
 无需先选择任务类型，直接像在 Codex 中一样说话即可。桥接器只做本地展示和安全分流：问题显示为回答，读取/检查/分析显示为只读分析，文档与文件写作显示为内容任务，明确修复/实现/修改才显示为代码任务。原始要求仍会完整交给 Codex，不会被改写。
 
-在群聊顶层直接发送普通要求时，机器人会把回复放进新的回复串；这个回复串就是一个独立工作会话。之后在串内继续说话会恢复同一个 Codex thread。新回复串会继承群主会话当前选择的项目、模型和权限上限，但不会继承旧 thread、临时完全访问或未完成审批。完整模型见 [V4 工作区会话交互模型](docs/V4_WORKSPACE_SESSION_FLOW.md)。
+群聊首次使用时，管理员只需把机器人加入群并发送一条消息，在飞书卡片中选择一次项目；绑定完成前不会执行 Codex 任务。项目与群随后永久固定，卡片和文字命令都不再允许切换。也可以在私聊项目卡中一键创建项目群，机器人会建群、邀请已授权成员、绑定项目并置顶工作区卡，无需复制 `chat_id` 或修改 `.env`。成员、工作台或置顶只有部分成功时，卡片会显示准确待修复步骤；再次点击只补失败步骤，不会重复建群。
+
+绑定后，在群聊顶层直接发送普通要求时，机器人会把回复放进新的回复串；这个回复串就是一个独立工作会话。之后在串内继续说话会恢复同一个 Codex thread。新回复串继承群绑定的项目以及发起人的模型和权限上限，但不会继承旧 thread、临时完全访问或未完成审批。完整模型见 [V4 工作区会话交互模型](docs/V4_WORKSPACE_SESSION_FLOW.md)。
 
 任务运行时直接发送下一条普通消息，也会自动作为补充要求加入当前 turn；只有显式使用“排队”才会创建另一个任务。`读取项目` 是本地确定性快照，不启动模型、使用 0 AI token；需要模型理解时再发送“深入分析项目架构”。任务卡把累计输入拆成新增与缓存，避免把已缓存上下文误认为本轮真实新增消耗。
 
@@ -158,7 +161,7 @@ npm start
 
 项目工作台会把个人收藏放在最前、最近使用放在其后；同名项目始终同时显示路径。切换不会删除项目文件或 Codex 历史，但会停止当前飞书会话的未完成任务并解除旧 thread 绑定。新建 thread 会按第一条任务自动命名，之后可从“会话”中心恢复并与本机 Codex 接力。
 
-新成员第一次私聊机器人发送有效消息或附件时，会看到一张紧凑欢迎卡，但原来的命令或任务仍会继续处理；群聊不会自动插入欢迎卡。卡片根据真实状态只提供一个主动作：查看连接、选择项目，或直接开始使用。准备完成后会给出提问、分析和代码任务示例，并用一句话说明团队用法：一个项目建一个群，新事情发新消息，继续同一件事就在回复里说。技术配置不会出现在成员引导中。欢迎卡按成员只自动出现一次；团队希望自行培训时，可在 `.env` 设置 `FEISHU_AUTO_ONBOARDING=false`，成员仍可随时发送“新手引导”手动打开。
+新成员的首条真实消息不会再被欢迎卡打断。私聊会在后台记录首次使用状态，任务成功后自动完成激活；手动发送“新手引导”时，主按钮会直接启动一个强制只读的项目概览任务，不修改文件，也不运行测试或构建。成功后只保留三个心智模型：直接说目标、继续就回复、另一件事先开新会话。团队群和高级设置放到后续流程，不阻塞个人第一次成功。团队希望自行培训时，可在 `.env` 设置 `FEISHU_AUTO_ONBOARDING=false`，成员仍可随时手动打开引导。
 
 ## 团队模式
 
@@ -269,7 +272,7 @@ CODEX_SANDBOX_MODE=danger-full-access
 - 操作者的权限由 `CODEX_OPERATOR_SANDBOX_MODE` 单独封顶，即使服务本身开启完全访问也默认只获得工作区写入。
 - 临时租约绑定本人、聊天和当前项目；会话租约还绑定 Codex thread。管理员可以撤销他人租约，但不能替他人授予。
 - 仓库策略可以把本项目权限进一步降为工作区写入或只读，已有租约不能越过仓库上限。
-- 未配置 `ALLOWED_FEISHU_CHAT_IDS` 时，授权用户私聊可用，但所有群聊请求会自动拒绝。
+- 未绑定群在完全访问模式下只能由管理员进入首次项目选择，绑定完成前不会执行任务；成功后群 ID 与项目持久化为可信工作区。`ALLOWED_FEISHU_CHAT_IDS` 只保留为预置信任兼容项。
 - 聊天只能选择项目注册表中已经发现的目录，不能通过消息输入任意本机路径。
 - commit、push、publish、release、deploy，以及创建或合并 PR/MR，必须先在短期确认卡中明确授权。
 - Codex 实际执行的命令会再次检查；临时决定执行未授权外部动作时，任务会被停止。
@@ -348,13 +351,25 @@ ATTACHMENT_RETENTION_HOURS=72
 
 ## 飞书应用要求
 
+普通用户不需要理解下面的 scope。部署者绑定应用后运行：
+
+```bash
+feishu-codex-bridge configure-feishu
+```
+
+命令会自动识别当前 App ID，通过飞书官方页面一次配置本产品需要的最小权限和事件，并展示权限差异；它不会申请通讯录、日历、云文档等无关权限。只修复群内普通消息时使用 `--profile ordinary-group`。如果飞书提示存在待发布版本，仍需由应用管理员确认发布。
+
 - 机器人具备私聊/群聊消息读取与回复权限。
 - `im:message:readonly`：卡片回调与附件下载。
 - `cardkit:card:write`：创建和持续更新 Card 2.0。
+- `im:chat:create`：在私聊项目卡中一键创建项目群。
+- `im:chat.members:write_only`：把已授权团队成员加入自动创建的项目群。
+- `im:message.pins:write_only`：置顶项目工作区卡。
+- `im:message.group_msg` 或 `im:message.group_msg:readonly`：接收项目群里未 @ 机器人的普通消息。
 - 在开发者后台启用 `im.message.receive_v1` 与 `card.action.trigger`。
 - 使用长连接接收事件，无需公网回调地址。
 
-旧应用不需要删除；给当前应用补齐权限和事件订阅即可。
+旧应用不需要删除；运行上面的一键配置命令补齐权限和事件订阅即可。缺少普通群消息权限时，私聊和群内 `@机器人` 仍可使用，但项目群不会显示为完全就绪。
 
 ## 数据与凭据
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, stat } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
@@ -30,6 +31,10 @@ import {
 } from "./install-state.mjs";
 import { assessUpgradeReadiness, parseBackupId } from "./upgrade-lib.mjs";
 import { initializeRunbookTemplate } from "./runbook-template.mjs";
+import {
+  configureFeishuApplication,
+  permissionPlan,
+} from "./feishu-app-setup.mjs";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -42,12 +47,16 @@ const shorthandCommand =
       : undefined;
 if (shorthandCommand) args.shift();
 const command = shorthandCommand ?? (args[0] && !args[0].startsWith("-") ? args.shift() : "help");
-const flags = parseFlags(args);
 
 try {
-  if (command === "init" || command === "onboard") await initialize(flags);
+  const flags = parseFlags(args);
+  if (flags.help) printHelp();
+  else if (command === "init" || command === "onboard") await initialize(flags);
   else if (command === "migrate") await migrateLegacy(flags);
   else if (command === "discover") await discover(flags);
+  else if (command === "configure-feishu" || command === "permissions") {
+    await configureFeishu(flags);
+  }
   else if (command === "doctor") runProjectCommand("doctor", flags);
   else if (command === "backup") runDataCommand("backup", flags);
   else if (command === "backups") runDataCommand("list", flags);
@@ -111,15 +120,17 @@ async function initialize(options) {
     );
     for (const root of projectRoots) await requireDirectory(path.resolve(root), "项目扫描根目录");
 
+    let capabilityReport;
     if (botIdentityAvailable()) {
       installState = await recordInstallStep(configFile, installState, "feishu_bound");
-      const capabilityReport = probeFeishuCapabilities(localBinary("lark-cli"), {
+      capabilityReport = probeFeishuCapabilities(localBinary("lark-cli"), {
         cwd: packageRoot,
       });
       printCapabilityReport(capabilityReport);
       if (!capabilityReport.ok) {
         throw new Error("飞书应用能力检查未通过，请按上方提示修复后重新运行。");
       }
+      await maybeConfigureFeishuApplication(options, rl, capabilityReport.projectChatStatus);
       installState = await recordInstallStep(
         configFile,
         installState,
@@ -248,6 +259,7 @@ async function initialize(options) {
             instanceId,
             projectName: path.basename(workdir),
             sandboxLabel: sandboxLabelForPreset(preset),
+            groupChatStatus: capabilityReport?.projectChatStatus ?? "unknown",
           });
           installState = await recordInstallStep(
             configFile,
@@ -296,6 +308,66 @@ async function discover(options) {
   if (!result) throw new Error("等待超时，没有收到用户消息。");
   printDiscoveredIdentity(result);
   console.log(JSON.stringify(result));
+}
+
+async function configureFeishu(options) {
+  const profile = options.profile ?? options.feature ?? "all";
+  const plan = permissionPlan(profile);
+  console.log("\n飞书应用一键配置\n");
+  console.log(`方案：${plan.label}`);
+  console.log(`只会申请本产品需要的 ${plan.scopes.length} 项应用权限，不会开启全部飞书权限。`);
+  if (profile === "ordinary-group") {
+    console.log("本次只补齐：项目群内无需 @ 机器人的普通消息接收能力。");
+  }
+  console.log("浏览器将显示本次权限差异；确认前不会修改应用。\n");
+  const result = await configureFeishuApplication({
+    profile,
+    appId: options.appId,
+    cliPath: localBinary("lark-cli"),
+    cwd: packageRoot,
+    timeoutMs: parseDurationMs(options.timeout ?? "10m", "--timeout"),
+    openBrowser: !options.noOpen,
+    onVerificationUrl(info) {
+      console.log(`请在 ${Math.max(1, Math.floor(info.expireIn / 60))} 分钟内确认：`);
+      console.log(info.url);
+      console.log("\n正在等待飞书确认……");
+    },
+  });
+  console.log(`\n✓ 飞书应用 ${result.appId} 已完成配置确认。`);
+  console.log("下一步：若开发者后台显示待发布版本，请完成发布；然后运行 doctor 并在项目群发送一条不 @ 机器人的普通消息。 ");
+}
+
+async function maybeConfigureFeishuApplication(options, rl, projectChatStatus) {
+  if (projectChatStatus === "ready") return;
+  const requested = Boolean(options.configureFeishu);
+  const shouldConfigure = requested || Boolean(
+    rl && await confirm(
+      rl,
+      projectChatStatus === "missing"
+        ? "检测到项目群权限不完整，立即一键补齐本产品所需权限？"
+        : "当前身份无法核验项目群权限，立即用官方确认页一键配置？",
+      true,
+    ),
+  );
+  if (!shouldConfigure) {
+    console.log("! 已跳过项目群权限配置；私聊与群内 @ 机器人仍可使用。");
+    console.log("  稍后修复：feishu-codex-bridge configure-feishu --profile project-chat\n");
+    return;
+  }
+  console.log("\n正在生成飞书官方权限确认页；只申请本产品所需的最小权限……");
+  await configureFeishuApplication({
+    profile: "project-chat",
+    cliPath: localBinary("lark-cli"),
+    cwd: packageRoot,
+    timeoutMs: parseDurationMs(options.permissionTimeout ?? "10m", "--permission-timeout"),
+    openBrowser: !options.noOpen,
+    onVerificationUrl(info) {
+      console.log(`请在浏览器确认权限差异（链接约 ${Math.max(1, Math.floor(info.expireIn / 60))} 分钟内有效）：`);
+      console.log(info.url);
+      console.log("正在等待确认……");
+    },
+  });
+  console.log("✓ 权限配置已确认。若飞书提示待发布版本，请完成发布后继续安装。\n");
 }
 
 async function migrateLegacy(options) {
@@ -420,7 +492,7 @@ async function printVersionInfo(options) {
     larkCli: manifest.dependencies?.["@larksuite/cli"] ?? "unknown",
     configContract: 1,
     stateContract: 6,
-    sqliteSchema: 1,
+    sqliteSchema: 3,
     platforms: ["macOS LaunchAgent", "Linux systemd user"],
   };
   if (options.json) {
@@ -723,8 +795,12 @@ function printExistingInstallation(existing, state, configFile, detected) {
 function printCapabilityReport(report) {
   console.log("\n飞书应用能力检查：");
   for (const check of report.checks) {
-    console.log(`${check.ok ? "✓" : "✗"} ${check.label}：${check.detail}`);
+    const icon = check.ok ? "✓" : check.required === false ? (check.status === "missing" ? "!" : "?") : "✗";
+    console.log(`${icon} ${check.label}：${check.detail}`);
     if (!check.ok && check.remediation) console.log(`  修复：${check.remediation}`);
+  }
+  if (report.projectChatStatus !== "ready") {
+    console.log("  说明：项目群能力不会阻止私聊安装；首次创建时会给出精确失败步骤并支持原地重试。");
   }
   console.log("");
 }
@@ -799,6 +875,9 @@ function runDataCommandCapture(action, options) {
 
 function resolveConfig(options) {
   if (options.config) return path.resolve(options.config);
+  if (process.env.DOTENV_CONFIG_PATH) return path.resolve(process.env.DOTENV_CONFIG_PATH);
+  const sourceConfig = path.join(packageRoot, ".env");
+  if (existsSync(sourceConfig)) return sourceConfig;
   const instance = normalizeInstanceId(options.instance ?? "default");
   return defaultSetupPaths(instance).configFile;
 }
@@ -851,10 +930,14 @@ function parseFlags(values) {
   const parsed = {};
   for (let index = 0; index < values.length; index += 1) {
     const token = values[index];
+    if (token === "-h") {
+      parsed.help = true;
+      continue;
+    }
     if (!token?.startsWith("--")) throw new Error(`无法识别参数：${token}`);
     const [rawKey, inlineValue] = token.slice(2).split("=", 2);
     const key = rawKey.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
-    if (["yes", "force", "forceReset", "noService", "noTestCard", "sendTestCard", "skipFeishuCheck", "allowFullAccess", "allowDowngrade", "fix", "json"].includes(key)) {
+    if (["yes", "force", "forceReset", "noService", "noTestCard", "sendTestCard", "skipFeishuCheck", "allowFullAccess", "allowDowngrade", "fix", "json", "noOpen", "configureFeishu", "help"].includes(key)) {
       parsed[key] = inlineValue === undefined ? true : inlineValue !== "false";
       continue;
     }
@@ -889,6 +972,7 @@ function printHelp() {
   feishu-codex-bridge init [选项]
   feishu-codex-bridge migrate --from <旧源码目录> [选项]
   feishu-codex-bridge discover [--timeout 2m]
+  feishu-codex-bridge configure-feishu [--profile all|core|project-chat|ordinary-group]
   feishu-codex-bridge doctor [--config <文件>] [--fix] [--diagnostics <JSON 文件>]
   feishu-codex-bridge install|status|stop|restart|uninstall [--config <文件>]
   feishu-codex-bridge backup|backups [--config <文件>]
@@ -915,6 +999,17 @@ function printHelp() {
   --allow-full-access
   --discovery-timeout 2m
   --health-timeout 30s
+  --configure-feishu          初始化时打开官方页面配置项目群最小权限
+  --permission-timeout 10m    等待权限确认的时间
+
+飞书应用配置选项：
+  --profile all                一键申请本产品所需的最小权限（默认）
+  --profile core               只配置私聊、@消息、卡片和附件
+  --profile project-chat       只配置项目群能力
+  --profile ordinary-group     只补齐群内无需 @ 的普通消息
+  --app-id cli_xxx             指定已有应用；默认自动识别当前 Bot
+  --timeout 10m                授权链接等待时间
+  --no-open                    不自动打开浏览器，只打印确认链接
 
 迁移选项：
   --from <旧源码目录>

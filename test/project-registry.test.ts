@@ -77,12 +77,12 @@ describe("ProjectRegistry", () => {
     const dam = await gitRepository(path.join(root, "dam"));
     const jml = path.join(root, "jml");
     await mkdir(jml, { recursive: true });
-    const thirdProject = await gitRepository(path.join(root, "third-project"));
+    const novartis = await gitRepository(path.join(root, "novartis"));
     const stateFile = path.join(root, "codex-state.json");
     await writeFile(
       stateFile,
       JSON.stringify({
-        "electron-saved-workspace-roots": [dam, jml, thirdProject],
+        "electron-saved-workspace-roots": [dam, jml, novartis],
         "project-order": [dam, jml],
         "electron-workspace-root-labels": { [jml]: "JML 集合" },
       }),
@@ -92,7 +92,7 @@ describe("ProjectRegistry", () => {
     const projects = await registry.refresh();
 
     expect(projects.map((project) => project.path)).toEqual([
-      thirdProject,
+      novartis,
       dam,
       await realpath(jml),
       defaultProject,

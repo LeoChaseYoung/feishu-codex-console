@@ -30,7 +30,22 @@ export function probeFeishuCapabilities(cliPath, options = {}) {
     ),
   );
 
-  return { ok: checks.every((check) => check.ok), checks };
+  const projectChatChecks = projectChatScopeResults(
+    run(cliPath, ["auth", "scopes", "--format", "json"], cwd),
+  );
+  checks.push(...projectChatChecks);
+
+  const requiredChecks = checks.filter((check) => check.required !== false);
+  const projectChatStatus = projectChatChecks.every((check) => check.ok)
+    ? "ready"
+    : projectChatChecks.some((check) => check.status === "missing")
+      ? "missing"
+      : "unknown";
+  return {
+    ok: requiredChecks.every((check) => check.ok),
+    projectChatStatus,
+    checks,
+  };
 }
 
 export function eventProbeArgs(eventKey) {
@@ -73,6 +88,84 @@ function result(id, label, outcome, remediation) {
     detail: extractError(text) || "不可用",
     remediation,
   };
+}
+
+function projectChatScopeResults(outcome) {
+  const definitions = [
+    {
+      id: "project_chat_create_scope",
+      label: "项目群 · 自动建群",
+      scope: "im:chat:create",
+      remediation: "在飞书开发者后台开通 im:chat:create，发布应用版本后重试。",
+    },
+    {
+      id: "project_chat_members_scope",
+      label: "项目群 · 邀请成员",
+      scope: "im:chat.members:write_only",
+      remediation:
+        "在飞书开发者后台开通 im:chat.members:write_only，发布应用版本后重试。",
+    },
+    {
+      id: "project_chat_pin_scope",
+      label: "项目群 · 置顶工作台",
+      scope: "im:message.pins:write_only",
+      remediation:
+        "在飞书开发者后台开通 im:message.pins:write_only，发布应用版本后重试。",
+    },
+    {
+      id: "project_chat_message_scope",
+      label: "项目群 · 普通消息",
+      scopes: ["im:message.group_msg", "im:message.group_msg:readonly"],
+      remediation:
+        "在安装机运行 feishu-codex-bridge configure-feishu --profile ordinary-group，按官方页面确认后发布应用版本；未完成前请在群内 @ 机器人。",
+    },
+  ];
+  const payload = parseJsonOutput(`${outcome.stdout ?? ""}\n${outcome.stderr ?? ""}`);
+  const appScopes = appScopeList(payload);
+  if (outcome.status !== 0 || appScopes === null) {
+    return definitions.map((definition) => ({
+      id: definition.id,
+      label: definition.label,
+      ok: false,
+      required: false,
+      status: "unknown",
+      detail: "当前 lark-cli 身份未返回应用级权限；首次使用项目群时会逐步验证",
+    }));
+  }
+  return definitions.map((definition) => {
+    const acceptedScopes = definition.scopes ?? [definition.scope];
+    const ok = acceptedScopes.some((scope) => appScopes.has(scope));
+    const scopeLabel = acceptedScopes.join(" 或 ");
+    return {
+      id: definition.id,
+      label: definition.label,
+      ok,
+      required: false,
+      status: ok ? "ready" : "missing",
+      detail: ok ? `${scopeLabel} 已开通` : `缺少 ${scopeLabel}`,
+      ...(!ok ? { remediation: definition.remediation } : {}),
+    };
+  });
+}
+
+function parseJsonOutput(text) {
+  try {
+    const start = text.indexOf("{");
+    if (start < 0) return null;
+    return JSON.parse(text.slice(start));
+  } catch {
+    return null;
+  }
+}
+
+function appScopeList(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  for (const key of ["tenantScopes", "appScopes", "botScopes", "scopes"]) {
+    if (Array.isArray(payload[key])) {
+      return new Set(payload[key].filter((scope) => typeof scope === "string"));
+    }
+  }
+  return null;
 }
 
 function runCommand(command, args, cwd) {

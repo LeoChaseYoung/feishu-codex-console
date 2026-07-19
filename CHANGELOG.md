@@ -2,6 +2,35 @@
 
 All notable changes are recorded here. Versions follow Semantic Versioning while the public API stabilizes.
 
+## Unreleased
+
+## 1.0.0-beta.10 - 2026-07-19
+
+### Added
+
+- Feishu-native project-group setup: create a dedicated group from a direct-message project card, or add the bot to an existing group and select its project once; authorized members, durable binding, and a pinned workspace card are handled automatically.
+- Recoverable project-group provisioning with durable member/workspace/pin step state, project-scoped single-flight creation, exact retry remediation, and v2-to-v3 SQLite migration.
+- A full-product SOP system covering installation, first success, device readiness, projects, native sessions, natural task intents, queues, models, quota, temporary permissions, runtime questions and approvals, results, attachments, immutable project groups, team handoff, operations, backups, upgrades, rollback, uninstall, and open-source release; every positive flow maps to a failure/recovery flow and automated or real-Feishu acceptance evidence.
+- Installer and `doctor` project-group capability reporting that distinguishes verified, missing, and currently unverifiable application scopes without blocking private-chat use.
+- A lightweight private-chat home for the current device, project, session, permission and next action, with detailed device controls kept on a secondary surface.
+- A first-success onboarding action that runs a real read-only project overview and completes activation only after the task succeeds.
+
+### Changed
+
+- Project groups are immutable after their first project selection. Before binding, an untrusted full-access group can only show the administrator binding card and cannot execute Codex work.
+- Existing-group binding now persists the immutable binding before changing conversation state; automatic-group retries resume only unfinished steps and never create a second chat after a binding exists.
+- Short contextual follow-ups inherit task intent only inside the same user, project, Feishu conversation and Codex thread; unmatched or negated mutation requests fall back to read-only analysis.
+- First natural-language requests are no longer preceded by a separate welcome card. `状态`/`首页` opens the product home, while `控制台`/`设备` opens detailed diagnostics.
+- Onboarding teaches the core interaction—state a goal, reply to continue, start a new session for different work—before team-group conventions or advanced settings.
+- Private-chat home and onboarding cards are sent as standalone entry surfaces instead of quoting the triggering command, keeping rich-text `[代码块]` wrappers out of the product UI.
+
+### Fixed
+
+- Feishu rich-text messages wrapped as `PLAIN_TEXT` blocks are normalized before command routing, so commands such as `新手引导` and `状态` no longer become accidental Codex tasks.
+- Known non-admin members in an unbound full-access group now receive a safe administrator-binding hint instead of being silently dropped, without trusting the group or enqueueing work.
+- Partial member invitation, workspace delivery, pinning, and private share failures no longer report a false all-success state; binding-card failure no longer suggests an unusable `/use` fallback.
+- Installation success cards now receive explicit project availability, write capability, and project-group readiness instead of treating omitted booleans as a missing project.
+
 ## 1.0.0-beta.9 - 2026-07-18
 
 ### Added

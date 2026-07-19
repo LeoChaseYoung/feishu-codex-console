@@ -6,14 +6,14 @@ This is the repeatable five-minute demo for a release candidate. Use a disposabl
 
 1. Install with the personal-safe preset and keep `workspace-write`, network off, and Web search disabled.
 2. Open a small Git repository with one intentionally failing test.
-3. In Feishu, send `新手引导`; verify the welcome card shows one clear primary action for the current device/project/role state.
+3. In Feishu, send `新手引导`; verify the primary action starts a read-only project overview and successful completion ends onboarding automatically.
 
 ## Demo story
 
 | Moment | Action | Product proof |
 |---|---|---|
-| 0:00 | Send `控制台` or `额度` | Device, consumers, Codex, independent native quota windows, reset times, project, queue, permission, and sampled time are clear |
-| 0:30 | Send `项目` and select the demo repo | Path/branch/dirty state prevent wrong-project execution |
+| 0:00 | Send `状态` | The lightweight home makes device, project, session, permission, and next action clear without advanced controls |
+| 0:30 | Open `控制台`, then select the demo repo from `项目` | Detailed health remains secondary; path/branch/dirty state prevent wrong-project execution |
 | 1:00 | Ask Codex to diagnose the failing test | A single live task card shows context, progress, model, reasoning, and permission |
 | 2:00 | Send a follow-up requirement | The same turn records steering instead of silently creating a second task |
 | 2:30 | Answer a non-secret question or one-shot approval | Native interaction resumes the same Codex task and expires safely |
