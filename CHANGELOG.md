@@ -4,6 +4,8 @@ All notable changes are recorded here. Versions follow Semantic Versioning while
 
 ## Unreleased
 
+## 1.0.0-beta.11 - 2026-07-19
+
 ### Added
 
 - An official “install with Codex” onboarding path for non-developer testers, with a copyable safety contract, clear human confirmation points, team-host guidance, and no source clone requirement.
