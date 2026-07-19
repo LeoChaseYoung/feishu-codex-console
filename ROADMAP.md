@@ -6,6 +6,7 @@ Feishu Codex Console stays focused: a local-first, outbound-only control plane f
 
 - Ten-minute guided installation and truthful device readiness.
 - Project/thread continuity, live tasks, steering, queueing, stop, native questions and approvals.
+- Feishu ↔ Codex desktop handoff for the same native thread, with explicit local-thread binding and visible activity source.
 - Reviewable diffs/tests, temporary full-access leases, repository policy, recovery and backups.
 - Team isolation, explicit task handoff, private aggregate dashboard, and reviewed runbooks.
 - Safe package upgrade, compatibility contract, support bundle, bilingual entry docs, and contributor path.
@@ -14,7 +15,6 @@ Exit criteria: a new operator installs from npm, completes the demo, upgrades an
 
 ## Next — 1.1 operations
 
-- Feishu ↔ Codex desktop handoff: open the same native thread, explicitly bind an existing local thread, and show the latest activity source without mirroring Feishu-only controls into Codex history.
 - More actionable doctor checks and a guided support-bundle review.
 - Task search/filtering and clearer long-running task checkpoints.
 - Runbook authoring validation command and richer parameter controls.

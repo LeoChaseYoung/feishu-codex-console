@@ -4,6 +4,15 @@ All notable changes are recorded here. Versions follow Semantic Versioning while
 
 ## Unreleased
 
+### Added
+
+- Feishu ↔ Codex desktop handoff for the exact same native thread on macOS, with a truthful `codex resume` fallback when desktop navigation is unsupported or fails.
+- Explicit same-project binding for recent local Codex threads, latest-activity source labels, confirmation, project/ACL checks, and busy-state protection that never cancels existing work implicitly.
+
+### Changed
+
+- The session center now explains which content is shared with Codex, distinguishes Feishu and desktop activity, and keeps Feishu-only cards, controls, queue state, and ordinary chat out of native Codex history.
+
 ## 1.0.0-beta.11 - 2026-07-19
 
 ### Added
